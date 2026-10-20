@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets and local config (documented in airflow/.env.example)
+.env
+*.pem
+*.p8
+*.key
+
+# Airflow runtime
+airflow/logs/
+airflow/config/airflow.cfg
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+backend.hcl
+crash.log
+
+# dbt
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
