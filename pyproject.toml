@@ -1,0 +1,32 @@
+[project]
+name = "earnings-watch"
+version = "0.1.0"
+description = "Flags public companies whose reported earnings outrun their cash, from SEC EDGAR filings."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=8,<10",
+    "ruff==0.17.1",
+    "pre-commit>=4.7,<5",
+    "sqlfluff==4.4.0",
+]
+
+[tool.uv]
+package = false  # a monorepo of runtimes, not an installable package
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "DTZ"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]  # assert is the point of a test
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
