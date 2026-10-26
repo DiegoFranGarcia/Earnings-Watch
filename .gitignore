@@ -33,3 +33,4 @@ dbt/logs/
 .DS_Store
 .idea/
 .vscode/
+*.tfplan
