@@ -1,0 +1,3 @@
+# Versions come from the Airflow constraints file in the Dockerfile.
+apache-airflow-providers-amazon
+apache-airflow-providers-snowflake
