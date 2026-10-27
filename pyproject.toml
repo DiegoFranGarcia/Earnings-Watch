@@ -16,6 +16,9 @@ dev = [
     "requests==2.34.2",
     "urllib3==2.7.0",
     "responses==0.26.3",
+    "boto3==1.43.56",
+    "botocore[crt]==1.43.56",  # [crt] adds awscrt, which `aws login` credentials need
+    "moto[s3]==5.2.4",
 ]
 
 [tool.uv]
