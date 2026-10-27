@@ -12,6 +12,10 @@ dev = [
     "ruff==0.17.1",
     "pre-commit>=4.7,<5",
     "sqlfluff==4.4.0",
+    # Same versions as the Airflow 3.3.1 constraints, so tests behave like the containers.
+    "requests==2.34.2",
+    "urllib3==2.7.0",
+    "responses==0.26.3",
 ]
 
 [tool.uv]
@@ -20,6 +24,7 @@ package = false  # a monorepo of runtimes, not an installable package
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+src = [".", "airflow/dags"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "DTZ"]
@@ -27,9 +32,10 @@ select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "DTZ"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101"]  # assert is the point of a test
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = "-ra"
-
 [tool.ruff.lint.isort]
 known-third-party = ["airflow"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["airflow/dags"]
+addopts = "-ra"
