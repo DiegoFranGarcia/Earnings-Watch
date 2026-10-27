@@ -5,12 +5,15 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+from earningswatch.fsds import FSDS_BASE_URL
+
 
 @dataclass(frozen=True)
 class Settings:
     sec_user_agent: str
     lake_bucket: str
     sec_rate_per_second: float
+    fsds_base_url: str
 
 
 def _required(name: str) -> str:
@@ -29,4 +32,6 @@ def load_settings() -> Settings:
         sec_user_agent=_required("SEC_USER_AGENT"),
         lake_bucket=_required("LAKE_BUCKET"),
         sec_rate_per_second=float(os.environ.get("SEC_RATE_PER_SECOND", "5")),
+        # The SEC has moved this path before, so it can be overridden without a code change.
+        fsds_base_url=os.environ.get("FSDS_BASE_URL", FSDS_BASE_URL),
     )

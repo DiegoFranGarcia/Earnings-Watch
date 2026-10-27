@@ -12,6 +12,7 @@ def env(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
     monkeypatch.setenv("SEC_USER_AGENT", "EarningsWatch test@example.com")
     monkeypatch.setenv("LAKE_BUCKET", "earnings-watch-test")
     monkeypatch.delenv("SEC_RATE_PER_SECOND", raising=False)
+    monkeypatch.delenv("FSDS_BASE_URL", raising=False)
     return monkeypatch
 
 
@@ -21,6 +22,7 @@ def test_reads_settings(env: pytest.MonkeyPatch) -> None:
     assert settings.sec_user_agent == "EarningsWatch test@example.com"
     assert settings.lake_bucket == "earnings-watch-test"
     assert settings.sec_rate_per_second == 5.0
+    assert settings.fsds_base_url.startswith("https://www.sec.gov/")
 
 
 def test_missing_setting_names_the_variable(env: pytest.MonkeyPatch) -> None:
