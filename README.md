@@ -1,8 +1,10 @@
 # EarningsWatch
 
+![CI](https://github.com/DiegoFranGarcia/Earnings-Watch/actions/workflows/ci.yml/badge.svg)
+
 Flags public companies whose reported earnings outrun their cash, using 17 years of SEC EDGAR filings.
 
-**Status:** Stage 0, foundations. Not investment advice.
+**Status:** Stage 1, ingestion. Not investment advice.
 
 ## Stack
 
