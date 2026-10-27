@@ -1,0 +1,19 @@
+# Laptop-only settings. Docker Compose merges this file over docker-compose.yaml automatically.
+# On EC2 (Stage 7) an IAM role provides credentials instead, and this file is not used.
+
+x-local-aws: &local-aws
+  environment:
+    AWS_PROFILE: earnings-watch
+    AWS_DEFAULT_REGION: us-east-1
+    # Explicit paths, so they work whatever the container's home directory is.
+    AWS_CONFIG_FILE: /home/airflow/.aws/config
+    AWS_LOGIN_CACHE_DIRECTORY: /home/airflow/.aws/login/cache
+  volumes:
+    # Your `aws login` session. Read-write, because boto3 saves refreshed tokens here.
+    - ${HOME}/.aws:/home/airflow/.aws
+
+services:
+  # Tasks run inside the scheduler with LocalExecutor.
+  airflow-scheduler: *local-aws
+  # Deferrable sensors (later) poll from here.
+  airflow-triggerer: *local-aws
