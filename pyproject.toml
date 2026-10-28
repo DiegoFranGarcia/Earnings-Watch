@@ -24,6 +24,8 @@ dev = [
     # dbt for the slice; same dbt-core as the Airflow image (airflow/dbt-requirements.txt).
     "dbt-core==1.12.6",
     "dbt-duckdb==1.11.0",
+    # The slice's dashboard.
+    "streamlit==1.65.0",
 ]
 
 [tool.uv]
@@ -32,7 +34,7 @@ package = false  # a monorepo of runtimes, not an installable package
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = [".", "airflow/dags", "slice"]
+src = [".", "airflow/dags", "slice", "app"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "DTZ"]
@@ -45,5 +47,5 @@ known-third-party = ["airflow"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["airflow/dags", "slice"]
+pythonpath = ["airflow/dags", "slice", "app"]
 addopts = "-ra"
