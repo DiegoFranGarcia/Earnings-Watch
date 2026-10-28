@@ -34,3 +34,6 @@ dbt/logs/
 .idea/
 .vscode/
 *.tfplan
+
+# Local working copies of lake data (the slice)
+data/

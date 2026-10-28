@@ -141,6 +141,33 @@ def extract_zip(
     return [results[member] for member in members]
 
 
+def download_verified(s3: Any, bucket: str, key: str, dest: Path) -> Manifest:
+    """Copy a landed bronze file to `dest`, proving it matches its manifest checksum.
+
+    A local copy that already matches is reused, so repeated runs download nothing.
+    """
+    manifest = read_manifest(s3, bucket, key)
+    if manifest is None:
+        raise BronzeIntegrityError(f"s3://{bucket}/{key} has not been landed completely")
+    if (
+        dest.exists()
+        and dest.stat().st_size == manifest.size_bytes
+        and _sha256_of(dest) == manifest.sha256
+    ):
+        log.info("Local copy already verified: %s", dest)
+        return manifest
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    partial = dest.with_name(dest.name + ".part")
+    s3.download_file(bucket, key, str(partial))
+    if _sha256_of(partial) != manifest.sha256:
+        partial.unlink()
+        raise BronzeIntegrityError(f"s3://{bucket}/{key} does not match its manifest checksum")
+    partial.replace(dest)  # only a verified file ever appears under the real name
+    log.info("Downloaded and verified %s", dest)
+    return manifest
+
+
 # -- internals ----------------------------------------------------------------
 
 

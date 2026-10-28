@@ -14,6 +14,7 @@ from moto import mock_aws
 
 from earningswatch.bronze import (
     BronzeIntegrityError,
+    download_verified,
     extract_zip,
     land_file,
     manifest_key,
@@ -184,3 +185,29 @@ def test_rejects_a_zip_changed_since_landing(s3) -> None:
 
     with pytest.raises(BronzeIntegrityError, match="checksum"):
         extract_zip(s3, BUCKET, ZIP_KEY, ("sub.txt",))
+
+
+# -- local verified copies --------------------------------------------------------
+
+
+def test_download_verified_copies_and_reuses(s3, tmp_path) -> None:
+    land_file(FakeSec(), s3, URL, BUCKET, KEY)
+    dest = tmp_path / "copy" / "master.idx"
+
+    download_verified(s3, BUCKET, KEY, dest)
+    assert dest.read_bytes() == BODY
+
+    s3.delete_object(Bucket=BUCKET, Key=KEY)  # if it tried to download again, this would fail
+    download_verified(s3, BUCKET, KEY, dest)
+    assert dest.read_bytes() == BODY
+
+
+def test_download_verified_rejects_a_changed_file(s3, tmp_path) -> None:
+    land_file(FakeSec(), s3, URL, BUCKET, KEY)
+    s3.put_object(Bucket=BUCKET, Key=KEY, Body=b"not what was landed")
+    dest = tmp_path / "master.idx"
+
+    with pytest.raises(BronzeIntegrityError, match="checksum"):
+        download_verified(s3, BUCKET, KEY, dest)
+    assert not dest.exists()
+    assert not dest.with_name(dest.name + ".part").exists()
