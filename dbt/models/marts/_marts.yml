@@ -4,8 +4,9 @@ models:
   - name: mart_earnings_quality
     description: >
       Grain: one row per 10-Q or 10-K with this year's and last year's year-to-date net
-      income and operating cash flow. is_flagged marks income up while cash went down,
-      excluding financial companies. A screen for where to look harder, not advice.
+      income and operating cash flow. is_flagged marks income up while cash went down, among
+      screened filings only (industry known, not financial). A screen for where to look
+      harder, not advice.
     config:
       contract:
         enforced: true
@@ -53,6 +54,28 @@ models:
       - name: is_financial
         data_type: boolean
         data_tests: [not_null]
+      - name: is_screened
+        description: Industry is known and not financial, so the screen applies.
+        data_type: boolean
+        data_tests: [not_null]
       - name: is_flagged
         data_type: boolean
         data_tests: [not_null]
+
+unit_tests:
+  - name: flags_only_screened_filings
+    description: >
+      All three filings show income up and cash down. Only the one with a known,
+      non-financial industry is flagged; a bank and a filing with no SIC code are not.
+    model: mart_earnings_quality
+    given:
+      - input: ref('int_facts__yoy')
+        rows:
+          - {accession_number: "OPERATING", cik: 1, sic: 3674, ytd_quarters: 2, net_income: 300, net_income_prior_year: 200, operating_cash_flow: 100, operating_cash_flow_prior_year: 180, total_assets: 1000}
+          - {accession_number: "BANK", cik: 2, sic: 6021, ytd_quarters: 2, net_income: 300, net_income_prior_year: 200, operating_cash_flow: 100, operating_cash_flow_prior_year: 180, total_assets: 1000}
+          - {accession_number: "NO_SIC_FUND", cik: 3, sic: null, ytd_quarters: 2, net_income: 300, net_income_prior_year: 200, operating_cash_flow: 100, operating_cash_flow_prior_year: 180, total_assets: 1000}
+    expect:
+      rows:
+        - {accession_number: "OPERATING", is_financial: false, is_screened: true, is_flagged: true}
+        - {accession_number: "BANK", is_financial: true, is_screened: false, is_flagged: false}
+        - {accession_number: "NO_SIC_FUND", is_financial: false, is_screened: false, is_flagged: false}

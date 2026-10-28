@@ -40,9 +40,14 @@ select
     (net_income - operating_cash_flow) / nullif(total_assets, 0) as accruals_to_assets,
     -- Banks and insurers (SIC 6000-6999): operating cash flow means something else there.
     coalesce(sic between 6000 and 6999, false) as is_financial,
-    (
-        net_income > net_income_prior_year
-        and operating_cash_flow < operating_cash_flow_prior_year
-        and not coalesce(sic between 6000 and 6999, false)
+    -- Screen only filings whose industry is known and not financial. Many investment funds
+    -- carry no SIC code, and for a fund buying investments is an operating cash outflow.
+    coalesce(sic is not null and sic not between 6000 and 6999, false) as is_screened,
+    coalesce(
+        sic is not null
+        and sic not between 6000 and 6999
+        and net_income > net_income_prior_year
+        and operating_cash_flow < operating_cash_flow_prior_year,
+        false
     ) as is_flagged
 from comparable
