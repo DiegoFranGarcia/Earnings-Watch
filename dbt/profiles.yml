@@ -1,0 +1,9 @@
+# Connection settings. No secrets: the slice uses a local DuckDB file.
+# Stage 3 adds a Snowflake target here, with credentials from environment variables.
+earningswatch:
+  target: slice
+  outputs:
+    slice:
+      type: duckdb
+      path: "{{ env_var('EW_DUCKDB_PATH', '../data/earningswatch.duckdb') }}"
+      threads: 4

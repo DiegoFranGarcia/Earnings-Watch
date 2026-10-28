@@ -1,0 +1,14 @@
+version: 2
+
+sources:
+  - name: silver
+    description: Typed Parquet written by slice/fsds_to_parquet.py, one folder per source quarter.
+    meta:
+      external_location: >-
+        read_parquet('{{ env_var('EW_SILVER_DIR', '../data/silver') }}/fsds/{name}/*/*.parquet',
+        hive_partitioning = true)
+    tables:
+      - name: sub
+        description: One row per EDGAR submission (filing).
+      - name: num
+        description: One row per number reported in a filing.

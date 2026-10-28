@@ -1,0 +1,58 @@
+version: 2
+
+models:
+  - name: mart_earnings_quality
+    description: >
+      Grain: one row per 10-Q or 10-K with this year's and last year's year-to-date net
+      income and operating cash flow. is_flagged marks income up while cash went down,
+      excluding financial companies. A screen for where to look harder, not advice.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: accession_number
+        data_type: varchar
+        data_tests: [unique, not_null]
+      - name: cik
+        data_type: bigint
+        data_tests: [not_null]
+      - name: company_name
+        data_type: varchar
+      - name: sic
+        data_type: integer
+      - name: form
+        data_type: varchar
+      - name: fiscal_year
+        data_type: integer
+      - name: fiscal_period
+        data_type: varchar
+      - name: period_end
+        data_type: date
+      - name: filed_date
+        data_type: date
+      - name: months_covered
+        data_type: integer
+      - name: net_income
+        data_type: decimal(28, 4)
+      - name: net_income_prior_year
+        data_type: decimal(28, 4)
+      - name: operating_cash_flow
+        data_type: decimal(28, 4)
+      - name: operating_cash_flow_prior_year
+        data_type: decimal(28, 4)
+      - name: total_assets
+        data_type: decimal(28, 4)
+      - name: net_income_change
+        data_type: decimal(28, 4)
+      - name: operating_cash_flow_change
+        data_type: decimal(28, 4)
+      - name: accruals
+        data_type: decimal(28, 4)
+      - name: accruals_to_assets
+        data_type: double
+      - name: is_financial
+        data_type: boolean
+        data_tests: [not_null]
+      - name: is_flagged
+        data_type: boolean
+        data_tests: [not_null]

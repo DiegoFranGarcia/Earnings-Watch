@@ -1,0 +1,73 @@
+version: 2
+
+models:
+  - name: int_facts__canonical
+    description: "Grain: one value per filing, metric, value date and duration, best tag first."
+    columns:
+      - name: metric
+        data_tests: [not_null]
+      - name: value
+        data_tests: [not_null]
+
+  - name: int_facts__yoy
+    description: "Grain: one row per 10-Q or 10-K filing."
+    columns:
+      - name: accession_number
+        data_tests: [unique, not_null]
+      - name: ytd_quarters
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4]
+                quote: false
+
+unit_tests:
+  - name: canonical_skips_empty_values_when_ranking_tags
+    description: >
+      A filing reports NetIncomeLoss (priority 1) with no value, and ProfitLoss (priority 2)
+      with a real number. The empty value must not win: the metric comes from ProfitLoss.
+    model: int_facts__canonical
+    given:
+      - input: ref('stg_sec__numbers')
+        rows:
+          - {accession_number: "A", cik: 1, tag: "NetIncomeLoss", taxonomy_version: "us-gaap/2026", value_date: "2026-06-30", duration_quarters: 2, unit: "USD", value: null, is_entity_total: true, has_key_conflict: false}
+          - {accession_number: "A", cik: 1, tag: "ProfitLoss", taxonomy_version: "us-gaap/2026", value_date: "2026-06-30", duration_quarters: 2, unit: "USD", value: 75, is_entity_total: true, has_key_conflict: false}
+      - input: ref('metric_tag_map')
+        rows:
+          - {metric: "net_income", tag: "NetIncomeLoss", priority: 1}
+          - {metric: "net_income", tag: "ProfitLoss", priority: 2}
+    expect:
+      rows:
+        - {accession_number: "A", metric: "net_income", tag: "ProfitLoss", value: 75}
+
+  - name: yoy_uses_the_year_to_date_span_not_the_quarter
+    description: >
+      A Q2 10-Q reports net income for the quarter (1) and the half year (2). Cash flow is
+      only year-to-date, so income must be compared on the same 2-quarter span.
+    model: int_facts__yoy
+    given:
+      - input: ref('stg_sec__submissions')
+        rows:
+          - accession_number: "A"
+            cik: 1
+            form: "10-Q"
+            fiscal_period: "Q2"
+            period_end: "2026-06-30"
+      - input: ref('int_facts__canonical')
+        rows:
+          - {accession_number: "A", metric: "net_income", value_date: "2026-06-30", duration_quarters: 1, value: 150}
+          - {accession_number: "A", metric: "net_income", value_date: "2026-06-30", duration_quarters: 2, value: 300}
+          - {accession_number: "A", metric: "net_income", value_date: "2025-06-30", duration_quarters: 2, value: 200}
+          - {accession_number: "A", metric: "operating_cash_flow", value_date: "2026-06-30", duration_quarters: 2, value: 100}
+          - {accession_number: "A", metric: "operating_cash_flow", value_date: "2025-06-30", duration_quarters: 2, value: 180}
+          - {accession_number: "A", metric: "total_assets", value_date: "2026-06-30", duration_quarters: 0, value: 1000}
+    expect:
+      rows:
+        - accession_number: "A"
+          ytd_quarters: 2
+          net_income: 300
+          net_income_prior_year: 200
+          operating_cash_flow: 100
+          operating_cash_flow_prior_year: 180
+          total_assets: 1000

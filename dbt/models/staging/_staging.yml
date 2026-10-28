@@ -1,0 +1,26 @@
+version: 2
+
+models:
+  - name: stg_sec__submissions
+    description: "Grain: one row per filing (accession number)."
+    columns:
+      - name: accession_number
+        data_tests: [unique, not_null]
+      - name: cik
+        data_tests: [not_null]
+
+  - name: stg_sec__numbers
+    description: "Grain: one row per reported number (the SEC's eight-column key, see has_key_conflict)."
+    columns:
+      - name: accession_number
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_sec__submissions')
+                field: accession_number
+      - name: duration_quarters
+        description: >
+          Quarters the number covers: 0 is a point in time, 1 a quarter, 4 a year. Longer spans
+          are legitimate (cumulative totals, e.g. restructuring costs to date).
+        data_tests: [not_null]

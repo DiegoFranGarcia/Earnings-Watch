@@ -1,0 +1,16 @@
+version: 2
+
+seeds:
+  - name: metric_tag_map
+    description: >
+      Which XBRL tags count as each canonical metric, best first. Companies tag the same
+      concept differently; a lower priority number wins when a filing reports several.
+    columns:
+      - name: metric
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [net_income, operating_cash_flow, total_assets]
+      - name: tag
+        data_tests: [unique, not_null]
