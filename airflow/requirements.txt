@@ -3,3 +3,5 @@ apache-airflow-providers-amazon
 apache-airflow-providers-snowflake
 # [crt] adds awscrt, which boto3 needs to use `aws login` credentials (local development).
 botocore[crt]
+# Writes silver Parquet inside DAG tasks.
+pyarrow

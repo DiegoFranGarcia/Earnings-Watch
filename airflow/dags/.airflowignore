@@ -1,0 +1,2 @@
+# Helper package imported by DAGs: not DAG files, so never parsed as DAGs.
+earningswatch/
