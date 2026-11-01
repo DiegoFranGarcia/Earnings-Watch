@@ -97,6 +97,35 @@ def land_file(sec: SecClient, s3: Any, url: str, bucket: str, key: str) -> LandR
     return LandResult(manifest, downloaded=True)
 
 
+def land_new_version(
+    sec: SecClient, s3: Any, url: str, bucket: str, key: str, previous: Manifest
+) -> LandResult | None:
+    """Land `url` at `key` only if its content differs from `previous`; else return None.
+
+    Used when the SEC seems to have republished a file: the original stays untouched,
+    and a genuinely different copy is kept beside it under its own key.
+    """
+    existing = read_manifest(s3, bucket, key)
+    if existing is not None:
+        return LandResult(existing, downloaded=False)
+    with tempfile.TemporaryDirectory(prefix="earningswatch-") as tmp:
+        result = sec.download(url, Path(tmp) / Path(key).name)
+        if result.sha256 == previous.sha256:
+            log.info("%s changed its headers, but the content is identical", url)
+            return None
+        manifest = _upload_and_commit(
+            s3,
+            bucket,
+            key,
+            result.path,
+            source_url=url,
+            sha256=result.sha256,
+            size_bytes=result.size_bytes,
+            last_modified=result.last_modified,
+        )
+    return LandResult(manifest, downloaded=True)
+
+
 def extract_zip(
     s3: Any, bucket: str, zip_key: str, members: tuple[str, ...]
 ) -> list[ExtractResult]:

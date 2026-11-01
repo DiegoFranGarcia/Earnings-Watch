@@ -87,6 +87,14 @@ class TokenBucket:
 
 
 @dataclass(frozen=True)
+class RemoteFile:
+    """What a HEAD request says about a file, without downloading it."""
+
+    size_bytes: int | None  # None when the size is unknown or is a compressed transfer size
+    last_modified: str | None
+
+
+@dataclass(frozen=True)
 class DownloadResult:
     """What we know about a file after downloading it."""
 
@@ -140,6 +148,20 @@ class SecClient:
         except SecNotFoundError:
             return False
         return True
+
+    def metadata(self, url: str) -> RemoteFile | None:
+        """HEAD a URL: its size and Last-Modified date, or None on 404."""
+        try:
+            response = self._request("HEAD", url)
+        except SecNotFoundError:
+            return None
+        with response:
+            headers = response.headers
+            length = headers.get("Content-Length")
+            # A compressed transfer reports the compressed size, not the file's own size.
+            compressed = headers.get("Content-Encoding", "identity") != "identity"
+            size = int(length) if length is not None and not compressed else None
+            return RemoteFile(size_bytes=size, last_modified=headers.get("Last-Modified"))
 
     def download(self, url: str, dest: Path) -> DownloadResult:
         """Stream a file to `dest`, hashing as it goes. Never holds it in memory.

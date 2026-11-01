@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import re
 
 FSDS_BASE_URL = "https://www.sec.gov/files/dera/data/financial-statement-data-sets"
@@ -35,3 +36,17 @@ def zip_key(quarter: str) -> str:
 
 def member_key(quarter: str, member: str) -> str:
     return f"{bronze_prefix(quarter)}/{member}"
+
+
+def version_zip_key(quarter: str, version: str) -> str:
+    """Where a republished copy of a quarter's ZIP goes; bronze never overwrites the original."""
+    q = validate_quarter(quarter)
+    return f"{bronze_prefix(q)}/version={version}/{q}.zip"
+
+
+def previous_quarter(day: dt.date) -> str:
+    """The calendar quarter before the one `day` falls in, e.g. 2027-01-01 -> '2026q4'."""
+    quarter = (day.month - 1) // 3 + 1
+    if quarter == 1:
+        return f"{day.year - 1}q4"
+    return f"{day.year}q{quarter - 1}"
