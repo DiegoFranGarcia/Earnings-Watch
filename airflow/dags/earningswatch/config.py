@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+from earningswatch.company_tickers import COMPANY_TICKERS_URL
 from earningswatch.fsds import FSDS_BASE_URL
 
 
@@ -14,6 +15,7 @@ class Settings:
     lake_bucket: str
     sec_rate_per_second: float
     fsds_base_url: str
+    company_tickers_url: str
 
 
 def _required(name: str) -> str:
@@ -34,4 +36,6 @@ def load_settings() -> Settings:
         sec_rate_per_second=float(os.environ.get("SEC_RATE_PER_SECOND", "5")),
         # The SEC has moved this path before, so it can be overridden without a code change.
         fsds_base_url=os.environ.get("FSDS_BASE_URL", FSDS_BASE_URL),
+        # The SEC moved this file once already (from /data/ to /files/).
+        company_tickers_url=os.environ.get("COMPANY_TICKERS_URL", COMPANY_TICKERS_URL),
     )

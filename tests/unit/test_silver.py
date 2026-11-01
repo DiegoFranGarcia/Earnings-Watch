@@ -9,8 +9,9 @@ import pyarrow.parquet as pq
 import pytest
 from moto import mock_aws
 
+from earningswatch.company_tickers import TickerListing
 from earningswatch.daily_index import Filing
-from earningswatch.silver import replace_partition, write_filings
+from earningswatch.silver import replace_partition, write_filings, write_tickers
 
 FILING = Filing(
     cik=2488,
@@ -37,6 +38,20 @@ def test_write_filings_handles_a_day_with_no_filings(tmp_path) -> None:
     path = tmp_path / "part-0.parquet"
     assert write_filings([], path) == 0
     assert pq.read_table(path).num_rows == 0
+
+
+def test_write_tickers_keeps_listings_without_an_exchange(tmp_path) -> None:
+    path = tmp_path / "part-0.parquet"
+    listings = [
+        TickerListing(320193, "Apple Inc.", "AAPL", "Nasdaq"),
+        TickerListing(1234567, "Example Holdings Corp", "EXHC", None),
+    ]
+
+    assert write_tickers(listings, path) == 2
+
+    table = pq.read_table(path)
+    assert table.schema.field("cik").type == "int64"
+    assert table.column("exchange").to_pylist() == ["Nasdaq", None]
 
 
 @pytest.fixture
