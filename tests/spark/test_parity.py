@@ -86,3 +86,15 @@ def test_verify_partition_catches_a_row_count_mismatch(spark, tmp_path) -> None:
     with pytest.raises(ReconciliationError, match="wrote 3 rows, but 2 are readable"):
         verify_partition(spark, str(table), QUARTER, expected=3)
     verify_partition(spark, str(table), QUARTER, expected=2)  # the right count passes
+
+
+def test_an_exact_bronze_folder_can_be_given(spark, tmp_path) -> None:
+    # A republished quarter lives in quarter=.../version=.../, not quarter=... itself.
+    staged = awkward_quarter(tmp_path / "staging")
+    versioned = tmp_path / "bronze" / f"quarter={QUARTER}" / "version=20261115"
+    versioned.parent.mkdir(parents=True)
+    staged.rename(versioned)
+
+    rec = run(spark, QUARTER, None, str(tmp_path / "silver"), 1.0, bronze_folder=str(versioned))
+
+    assert rec.num.rows_read == 11

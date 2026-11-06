@@ -16,6 +16,10 @@ class Settings:
     sec_rate_per_second: float
     fsds_base_url: str
     company_tickers_url: str
+    # Where Spark runs; optional, so DAGs that do not use EMR need none of them.
+    emr_application_id: str | None = None
+    emr_job_role_arn: str | None = None
+    spark_code_uri: str | None = None  # s3://<lake>/artifacts/spark/<commit>
 
 
 def _required(name: str) -> str:
@@ -38,4 +42,7 @@ def load_settings() -> Settings:
         fsds_base_url=os.environ.get("FSDS_BASE_URL", FSDS_BASE_URL),
         # The SEC moved this file once already (from /data/ to /files/).
         company_tickers_url=os.environ.get("COMPANY_TICKERS_URL", COMPANY_TICKERS_URL),
+        emr_application_id=os.environ.get("EMR_APPLICATION_ID") or None,
+        emr_job_role_arn=os.environ.get("EMR_JOB_ROLE_ARN") or None,
+        spark_code_uri=os.environ.get("SPARK_CODE_URI") or None,
     )

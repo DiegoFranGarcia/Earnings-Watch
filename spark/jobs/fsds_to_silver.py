@@ -126,12 +126,21 @@ def verify_partition(spark: SparkSession, path: str, quarter: str, expected: int
 def run(
     spark: SparkSession,
     quarter: str,
-    bronze_root: str,
+    bronze_root: str | None,
     silver_root: str,
     quarantine_limit: float = QUARANTINE_LIMIT,
+    *,
+    bronze_folder: str | None = None,
 ) -> Reconciliation:
+    """Convert one quarter. bronze_folder, when given, is the exact folder to read (for a
+    republished quarter, its version= folder); otherwise it is bronze_root/quarter=..."""
     started = time.perf_counter()
-    folder = f"{bronze_root.rstrip('/')}/quarter={quarter}"
+    if bronze_folder:
+        folder = bronze_folder.rstrip("/")
+    elif bronze_root:
+        folder = f"{bronze_root.rstrip('/')}/quarter={quarter}"
+    else:
+        raise ValueError("give bronze_root or bronze_folder")
     silver = silver_root.rstrip("/")
     raw = {
         "sub": read_raw(spark, f"{folder}/sub.txt", SUB_COLUMNS),
@@ -204,7 +213,9 @@ def _enforce(rec: Reconciliation, quarantine_limit: float) -> None:
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Convert one FSDS quarter to silver Parquet.")
     parser.add_argument("--quarter", required=True, help="for example 2026q3")
-    parser.add_argument("--bronze-root", required=True, help="folder holding quarter=YYYYqN/")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--bronze-root", help="folder holding quarter=YYYYqN/")
+    source.add_argument("--bronze-folder", help="the exact folder holding sub.txt and num.txt")
     parser.add_argument("--silver-root", required=True, help="silver folder or s3:// prefix")
     parser.add_argument("--local", action="store_true", help="run on this machine's cores")
     args = parser.parse_args(argv)
@@ -212,7 +223,13 @@ def main(argv: list[str] | None = None) -> None:
     spark = session(local=args.local)
     print(f"spark master: {spark.sparkContext.master}")
     spark.sparkContext.setLogLevel("WARN")
-    rec = run(spark, args.quarter.strip().lower(), args.bronze_root, args.silver_root)
+    rec = run(
+        spark,
+        args.quarter.strip().lower(),
+        args.bronze_root,
+        args.silver_root,
+        bronze_folder=args.bronze_folder,
+    )
     print(f"\n{'table':<5} {'expected':>12} {'read':>12} {'quarantined':>12} "
           f"{'cast fails':>11} {'dupes':>7} {'written':>12}")  # fmt: skip
     for check in (rec.sub, rec.num):

@@ -4,7 +4,7 @@ A run starts on the first day of a quarter and collects the quarter that just en
 It waits (deferred, holding nothing) until the SEC publishes the ZIP, lands it with a
 manifest, then extracts sub, num, tag and pre beside it. A quarter the SEC republishes
 is kept under a version= folder beside the original and flagged for reprocessing.
-Converting to silver Parquet is Stage 2 (Spark on EMR).
+Finally, Spark on EMR Serverless converts the quarter's exact bronze folder to silver Parquet.
 """
 
 from __future__ import annotations
@@ -12,11 +12,13 @@ from __future__ import annotations
 from datetime import timedelta
 
 import pendulum
+from airflow.providers.amazon.aws.operators.emr import EmrServerlessStartJobOperator
 from airflow.sdk import Asset, dag, task
 
 from earningswatch.sensors import SecFileSensor
 
 BRONZE_FSDS = Asset("bronze_fsds")
+SILVER_FSDS = Asset("silver_fsds")
 
 DEFAULT_ARGS = {
     "owner": "earningswatch",
@@ -107,10 +109,47 @@ def sec_fsds_quarterly():
         )
         return {r.member: (r.manifest.line_count or 1) - 1 for r in results}
 
+    @task(multiple_outputs=True)
+    def spark_job_spec(landing: dict) -> dict:
+        """The EMR request to convert exactly the bronze folder land_zip chose."""
+        from earningswatch.config import load_settings
+        from earningswatch.spark_jobs import fsds_to_silver_spec
+
+        settings = load_settings()
+        return fsds_to_silver_spec(
+            quarter=landing["quarter"],
+            bronze_folder_key=landing["zip_key"].rsplit("/", 1)[0],
+            bucket=settings.lake_bucket,
+            application_id=settings.emr_application_id,
+            job_role_arn=settings.emr_job_role_arn,
+            code_uri=settings.spark_code_uri,
+        )
+
     landed = land_zip(target)
     wait_for_zip >> landed
     target >> wait_for_zip
-    extract(landed)
+    extracted = extract(landed)
+    spec = spark_job_spec(landed)
+    extracted >> spec
+
+    EmrServerlessStartJobOperator(
+        task_id="to_silver",
+        application_id=spec["application_id"],
+        execution_role_arn=spec["execution_role_arn"],
+        job_driver=spec["job_driver"],
+        configuration_overrides=spec["configuration_overrides"],
+        name=spec["name"],
+        config={"executionTimeoutMinutes": 60},  # EMR stops the job itself after an hour
+        aws_conn_id=None,  # the default AWS credentials: aws login locally, a role on EC2
+        region_name="us-east-1",
+        deferrable=True,  # wait in the triggerer, holding no worker
+        waiter_delay=60,
+        waiter_max_attempts=120,  # check every minute, for up to two hours
+        pool="emr",  # one Spark job at a time; the pool counts deferred tasks
+        outlets=[SILVER_FSDS],
+        # A deferred task's deadline is start_date + execution_timeout: keep it above the wait.
+        execution_timeout=timedelta(hours=3),
+    )
 
 
 sec_fsds_quarterly()
