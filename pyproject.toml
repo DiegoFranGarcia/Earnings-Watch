@@ -35,7 +35,7 @@ package = false  # a monorepo of runtimes, not an installable package
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = [".", "airflow/dags", "slice", "app"]
+src = [".", "airflow/dags", "slice", "app", "spark"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "DTZ"]
@@ -48,5 +48,5 @@ known-third-party = ["airflow"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["airflow/dags", "slice", "app"]
+pythonpath = ["airflow/dags", "slice", "app", "spark"]
 addopts = "-ra"
