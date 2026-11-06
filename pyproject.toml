@@ -26,6 +26,7 @@ dev = [
     "dbt-duckdb==1.11.0",
     # The slice's dashboard.
     "streamlit==1.65.0",
+    "pyspark==4.0.2",
 ]
 
 [tool.uv]
