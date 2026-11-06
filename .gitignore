@@ -37,3 +37,4 @@ dbt/logs/
 
 # Local working copies of lake data (the slice)
 data/
+build/
