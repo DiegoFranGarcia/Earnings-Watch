@@ -16,7 +16,7 @@ from fsds_fixtures import awkward_quarter
 
 from compare_silver import compare
 from fsds_to_parquet import convert, write_parquet
-from jobs.fsds_to_silver import ReconciliationError, run
+from jobs.fsds_to_silver import ReconciliationError, run, verify_partition
 
 QUARTER = "2026q3"
 
@@ -69,3 +69,20 @@ def test_too_many_bad_rows_fails_before_writing(spark, tmp_path) -> None:
         run(spark, QUARTER, str(bronze), str(silver))  # default limit: 0.01%
 
     assert not (silver / "fsds").exists(), "nothing is written when reconciliation fails"
+
+
+def test_verify_partition_catches_output_that_never_landed(spark, tmp_path) -> None:
+    table = tmp_path / "silver" / "fsds" / "num"
+    (table / f"source_quarter={QUARTER}").mkdir(parents=True)  # written "successfully", empty
+
+    with pytest.raises(ReconciliationError, match="no readable Parquet"):
+        verify_partition(spark, str(table), QUARTER, expected=3)
+
+
+def test_verify_partition_catches_a_row_count_mismatch(spark, tmp_path) -> None:
+    table = tmp_path / "silver" / "fsds" / "num"
+    spark.range(2).write.parquet(str(table / f"source_quarter={QUARTER}"))
+
+    with pytest.raises(ReconciliationError, match="wrote 3 rows, but 2 are readable"):
+        verify_partition(spark, str(table), QUARTER, expected=3)
+    verify_partition(spark, str(table), QUARTER, expected=2)  # the right count passes

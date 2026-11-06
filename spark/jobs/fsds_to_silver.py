@@ -11,8 +11,10 @@ The same file runs on a laptop and on EMR Serverless. It:
 
 Local run, from the repository root:
 
-    uv run python spark/jobs/fsds_to_silver.py --quarter 2026q3 \
+    uv run python spark/jobs/fsds_to_silver.py --local --quarter 2026q3 \
         --bronze-root data/bronze/fsds --silver-root data/silver_spark
+
+On EMR, spark-submit chooses the cluster, so --local is left out.
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ from pathlib import Path
 if __package__ in (None, ""):  # run as a script: make spark/lib importable
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from pyspark import SparkConf  # noqa: E402
+from pyspark.errors import AnalysisException  # noqa: E402
 from pyspark.sql import DataFrame, SparkSession  # noqa: E402
 from pyspark.sql import functions as F  # noqa: E402
 
@@ -70,15 +72,19 @@ class Reconciliation:
     seconds: float
 
 
-def session(app_name: str = "fsds_to_silver") -> SparkSession:
-    """A Spark session; local[*] unless spark-submit (EMR) already chose the cluster."""
+def session(local: bool, app_name: str = "fsds_to_silver") -> SparkSession:
+    """A Spark session: all local cores with --local, otherwise the cluster spark-submit chose.
+
+    Local mode is an explicit choice, not detected: a SparkConf created before Spark starts
+    cannot see spark-submit's settings, so detection would wrongly pick local mode on EMR.
+    """
     builder = (
         SparkSession.builder.appName(app_name)
         .config("spark.sql.session.timeZone", "UTC")
         .config("spark.sql.sources.partitionOverwriteMode", "dynamic")
         .config("spark.sql.parquet.compression.codec", "zstd")
     )
-    if not SparkConf().contains("spark.master"):
+    if local:
         builder = builder.master("local[*]").config("spark.driver.memory", "4g")
     return builder.getOrCreate()
 
@@ -98,6 +104,23 @@ def _write_partition(df: DataFrame, path: str, quarter: str) -> None:
         .partitionBy("source_quarter")
         .parquet(path)
     )
+
+
+def verify_partition(spark: SparkSession, path: str, quarter: str, expected: int) -> None:
+    """Read back a written partition and fail unless exactly `expected` rows are readable.
+
+    A job can report success while its output never becomes visible (an uncommitted S3
+    upload, for example). This turns that silent failure into a loud one.
+    """
+    partition = f"{path}/source_quarter={quarter}"
+    try:
+        readable = spark.read.parquet(partition).count()
+    except AnalysisException as exc:
+        raise ReconciliationError(f"{partition}: no readable Parquet after writing") from exc
+    if readable != expected:
+        raise ReconciliationError(
+            f"{partition}: wrote {expected:,} rows, but {readable:,} are readable"
+        )
 
 
 def run(
@@ -147,6 +170,8 @@ def run(
 
     _write_partition(sub, f"{silver}/fsds/sub", quarter)
     _write_partition(num, f"{silver}/fsds/num", quarter)
+    verify_partition(spark, f"{silver}/fsds/sub", quarter, checks["sub"].rows_written)
+    verify_partition(spark, f"{silver}/fsds/num", quarter, checks["num"].rows_written)
     for table in ("sub", "num"):
         if checks[table].rows_quarantined:
             _write_partition(
@@ -181,9 +206,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--quarter", required=True, help="for example 2026q3")
     parser.add_argument("--bronze-root", required=True, help="folder holding quarter=YYYYqN/")
     parser.add_argument("--silver-root", required=True, help="silver folder or s3:// prefix")
+    parser.add_argument("--local", action="store_true", help="run on this machine's cores")
     args = parser.parse_args(argv)
 
-    spark = session()
+    spark = session(local=args.local)
+    print(f"spark master: {spark.sparkContext.master}")
     spark.sparkContext.setLogLevel("WARN")
     rec = run(spark, args.quarter.strip().lower(), args.bronze_root, args.silver_root)
     print(f"\n{'table':<5} {'expected':>12} {'read':>12} {'quarantined':>12} "
