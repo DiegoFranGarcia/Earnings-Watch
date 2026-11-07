@@ -22,11 +22,22 @@ models:
 seeds:
   earningswatch:
     +schema: staging
+    metrics:
+      +column_types:
+        metric: varchar
+        kind: varchar
+        statement: varchar
+        description: varchar
     metric_tag_map:
       +column_types:
         metric: varchar
         tag: varchar
         priority: integer
+
+vars:
+  # A value counts as restated when its latest figure differs from the first-reported one by
+  # more than this share of it: smaller differences are rounding (thousands vs millions).
+  restatement_threshold: 0.005
 
 flags:
   send_anonymous_usage_stats: false

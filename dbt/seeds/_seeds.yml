@@ -1,16 +1,39 @@
 version: 2
 
 seeds:
-  - name: metric_tag_map
+  - name: metrics
     description: >
-      Which XBRL tags count as each canonical metric, best first. Companies tag the same
-      concept differently; a lower priority number wins when a filing reports several.
+      The canonical metrics. kind is "flow" (measured over a span, such as revenue for a
+      quarter; year-to-date in 10-Qs) or "instant" (measured at a point in time, such as
+      total assets at quarter end).
     columns:
       - name: metric
+        data_tests: [unique, not_null]
+      - name: kind
         data_tests:
           - not_null
           - accepted_values:
               arguments:
-                values: [net_income, operating_cash_flow, total_assets]
+                values: [flow, instant]
+      - name: statement
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [income_statement, cash_flow, balance_sheet]
+
+  - name: metric_tag_map
+    description: >
+      Which XBRL tags count as each canonical metric, best first. Companies tag the same
+      concept differently, and tags change with accounting standards (revenue's did with
+      ASC 606 in 2018); a lower priority number wins when a filing reports several.
+    columns:
+      - name: metric
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('metrics')
+                field: metric
       - name: tag
         data_tests: [unique, not_null]

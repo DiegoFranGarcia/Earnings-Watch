@@ -1,0 +1,51 @@
+version: 2
+
+models:
+  - name: int_facts__versions
+    description: >
+      Grain: one row per company, metric, value date and duration. Every value reported for
+      that fact across all filings, ordered by acceptance time: first-reported and latest
+      values, how many filings reported it, and whether it was materially restated (beyond
+      var restatement_threshold).
+    columns:
+      - name: fact_key
+        data_tests: [unique, not_null]
+      - name: report_count
+        data_tests: [not_null]
+      - name: first_reported_value
+        data_tests: [not_null]
+      - name: latest_value
+        data_tests: [not_null]
+      - name: is_restated
+        data_tests: [not_null]
+
+unit_tests:
+  - name: versions_separate_first_reported_from_latest
+    description: >
+      A fact reported three times keeps its first and latest values apart. A 0.4% change
+      (rounding between filings) is not a restatement; a 10% change is; and a first value of
+      zero makes any later non-zero value a restatement.
+    model: int_facts__versions
+    given:
+      - input: ref('int_facts__canonical')
+        rows:
+          - {accession_number: "k23", cik: 1, metric: net_income, value_date: "2023-12-31", duration_quarters: 4, value: 100}
+          - {accession_number: "k24", cik: 1, metric: net_income, value_date: "2023-12-31", duration_quarters: 4, value: 100.4}
+          - {accession_number: "k24a", cik: 1, metric: net_income, value_date: "2023-12-31", duration_quarters: 4, value: 90}
+          - {accession_number: "k22", cik: 1, metric: net_income, value_date: "2022-12-31", duration_quarters: 4, value: 50}
+          - {accession_number: "k23", cik: 1, metric: net_income, value_date: "2022-12-31", duration_quarters: 4, value: 50.2}
+          - {accession_number: "r23", cik: 2, metric: revenue, value_date: "2023-12-31", duration_quarters: 4, value: 0}
+          - {accession_number: "r24", cik: 2, metric: revenue, value_date: "2023-12-31", duration_quarters: 4, value: 5}
+      - input: ref('stg_sec__submissions')
+        rows:
+          - {accession_number: "k22", accepted_at: "2023-02-01 09:00:00"}
+          - {accession_number: "k23", accepted_at: "2024-02-01 09:00:00"}
+          - {accession_number: "k24", accepted_at: "2025-02-01 09:00:00"}
+          - {accession_number: "k24a", accepted_at: "2025-06-01 09:00:00"}
+          - {accession_number: "r23", accepted_at: "2024-03-01 09:00:00"}
+          - {accession_number: "r24", accepted_at: "2025-03-01 09:00:00"}
+    expect:
+      rows:
+        - {cik: 1, metric: net_income, value_date: "2023-12-31", report_count: 3, first_reported_value: 100, first_reported_accession_number: "k23", latest_value: 90, latest_accession_number: "k24a", is_restated: true}
+        - {cik: 1, metric: net_income, value_date: "2022-12-31", report_count: 2, first_reported_value: 50, first_reported_accession_number: "k22", latest_value: 50.2, latest_accession_number: "k23", is_restated: false}
+        - {cik: 2, metric: revenue, value_date: "2023-12-31", report_count: 2, first_reported_value: 0, first_reported_accession_number: "r23", latest_value: 5, latest_accession_number: "r24", is_restated: true}

@@ -1,0 +1,13 @@
+metric,kind,statement,description
+revenue,flow,income_statement,Revenue from customers: ASC 606 tags first and legacy tags after
+net_income,flow,income_statement,Net income attributable to the parent; consolidated profit as fallback
+operating_income,flow,income_statement,Operating income or loss
+operating_cash_flow,flow,cash_flow,Net cash provided by or used in operating activities
+capital_expenditure,flow,cash_flow,Payments to acquire property plant and equipment
+total_assets,instant,balance_sheet,Total assets
+total_liabilities,instant,balance_sheet,Total liabilities
+stockholders_equity,instant,balance_sheet,Stockholders' equity: parent first and including minority interest after
+liabilities_and_equity,instant,balance_sheet,Total liabilities and stockholders' equity
+current_assets,instant,balance_sheet,Total current assets
+current_liabilities,instant,balance_sheet,Total current liabilities
+cash,instant,balance_sheet,Cash and cash equivalents: restricted cash included only as a fallback
