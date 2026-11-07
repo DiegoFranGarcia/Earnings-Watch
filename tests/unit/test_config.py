@@ -14,7 +14,10 @@ def env(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
     monkeypatch.delenv("SEC_RATE_PER_SECOND", raising=False)
     monkeypatch.delenv("FSDS_BASE_URL", raising=False)
     monkeypatch.delenv("COMPANY_TICKERS_URL", raising=False)
-    for name in ("EMR_APPLICATION_ID", "EMR_JOB_ROLE_ARN", "SPARK_CODE_URI"):
+    for name in (
+        "EMR_APPLICATION_ID", "EMR_JOB_ROLE_ARN", "SPARK_CODE_URI",
+        "SF_ACCOUNT", "SF_USER", "SF_PRIVATE_KEY_PATH", "SF_DATABASE",
+    ):  # fmt: skip
         monkeypatch.delenv(name, raising=False)
     return monkeypatch
 
@@ -28,6 +31,7 @@ def test_reads_settings(env: pytest.MonkeyPatch) -> None:
     assert settings.fsds_base_url.startswith("https://www.sec.gov/")
     assert settings.company_tickers_url.endswith("/company_tickers_exchange.json")
     assert settings.emr_application_id is None, "EMR settings are optional"
+    assert settings.sf_account is None, "Snowflake settings are optional"
 
 
 def test_missing_setting_names_the_variable(env: pytest.MonkeyPatch) -> None:

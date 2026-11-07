@@ -132,7 +132,7 @@ def sec_fsds_quarterly():
     spec = spark_job_spec(landed)
     extracted >> spec
 
-    EmrServerlessStartJobOperator(
+    to_silver = EmrServerlessStartJobOperator(
         task_id="to_silver",
         application_id=spec["application_id"],
         execution_role_arn=spec["execution_role_arn"],
@@ -146,10 +146,16 @@ def sec_fsds_quarterly():
         waiter_delay=60,
         waiter_max_attempts=120,  # check every minute, for up to two hours
         pool="emr",  # one Spark job at a time; the pool counts deferred tasks
-        outlets=[SILVER_FSDS],
         # A deferred task's deadline is start_date + execution_timeout: keep it above the wait.
         execution_timeout=timedelta(hours=3),
     )
+
+    @task(outlets=[SILVER_FSDS])
+    def announce_silver(landing: dict, **context) -> None:
+        """Tell downstream DAGs which quarter is new in silver (snowflake_load reads it)."""
+        context["outlet_events"][SILVER_FSDS].extra = {"quarter": landing["quarter"]}
+
+    to_silver >> announce_silver(landed)
 
 
 sec_fsds_quarterly()

@@ -16,6 +16,7 @@ from earningswatch.snowflake_load import (
     create_table_sql,
     expected_rows,
     load_quarter,
+    quarters_to_load,
 )
 
 
@@ -128,3 +129,19 @@ def test_expected_rows_come_from_sparks_reconciliation_record() -> None:
 
     with pytest.raises(LoadMismatch, match="found 0"):
         expected_rows(s3, "lake", "2026q2")
+
+
+def test_a_manual_range_wins_over_announced_quarters() -> None:
+    assert quarters_to_load("2025q4..2026q2", ["2026q3"]) == ["2025q4", "2026q1", "2026q2"]
+    assert quarters_to_load("2026q3, 2026q1,2026q3", []) == ["2026q1", "2026q3"]
+
+
+def test_without_a_manual_range_the_announced_quarters_load() -> None:
+    assert quarters_to_load("", ["2026q3", "2026q2", "2026q3"]) == ["2026q2", "2026q3"]
+    assert quarters_to_load("  ", []) == [], "nothing announced, nothing to load"
+
+
+def test_bad_manual_input_is_refused() -> None:
+    for bad in ("2026q3..2026q1", "2026q5", "next quarter"):
+        with pytest.raises(ValueError):
+            quarters_to_load(bad, [])

@@ -20,6 +20,11 @@ class Settings:
     emr_application_id: str | None = None
     emr_job_role_arn: str | None = None
     spark_code_uri: str | None = None  # s3://<lake>/artifacts/spark/<commit>
+    # Snowflake, as SVC_AIRFLOW (role LOADER); optional, like the EMR settings.
+    sf_account: str | None = None  # ORG-ACCOUNT
+    sf_user: str | None = None
+    sf_private_key_path: str | None = None
+    sf_database: str | None = None
 
 
 def _required(name: str) -> str:
@@ -45,4 +50,8 @@ def load_settings() -> Settings:
         emr_application_id=os.environ.get("EMR_APPLICATION_ID") or None,
         emr_job_role_arn=os.environ.get("EMR_JOB_ROLE_ARN") or None,
         spark_code_uri=os.environ.get("SPARK_CODE_URI") or None,
+        sf_account=os.environ.get("SF_ACCOUNT") or None,
+        sf_user=os.environ.get("SF_USER") or None,
+        sf_private_key_path=os.environ.get("SF_PRIVATE_KEY_PATH") or None,
+        sf_database=os.environ.get("SF_DATABASE") or None,
     )

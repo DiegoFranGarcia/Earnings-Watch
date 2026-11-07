@@ -15,6 +15,8 @@ import logging
 import re
 from dataclasses import dataclass
 
+from earningswatch.reconcile import quarters_between
+
 log = logging.getLogger(__name__)
 
 _QUARTER = re.compile(r"^\d{4}q[1-4]$")
@@ -180,3 +182,40 @@ def load_quarter(cursor, quarter: str, expected: dict[str, int]) -> QuarterLoad:
     cursor.execute("COMMIT")
     log.info("Loaded %s: %s", quarter, ", ".join(f"{t} {n:,}" for t, n in rows.items()))
     return QuarterLoad(quarter, rows)
+
+
+def quarters_to_load(manual: str, announced: list[str]) -> list[str]:
+    """A manual run's quarters ('2026q3', '2026q1,2026q3' or '2009q2..2026q3') if given,
+    otherwise the quarters the triggering silver_fsds events announced. Sorted, no repeats."""
+    quarters: list[str] = []
+    for part in (p.strip().lower() for p in manual.split(",")):
+        if ".." in part:
+            first, last = (check_quarter(end.strip()) for end in part.split("..", 1))
+            if first > last:
+                raise ValueError(f"range runs backwards: {part!r}")
+            quarters += quarters_between(first, last)
+        elif part:
+            quarters.append(check_quarter(part))
+    if not manual.strip():
+        quarters = [check_quarter(q) for q in announced]
+    return sorted(set(quarters))
+
+
+def connect(account: str, user: str, private_key_path: str, database: str, query_tag: str):
+    """A Snowflake connection with key-pair login, defaulting to the RAW schema.
+
+    The query tag labels every statement in Snowflake's query history, for cost attribution.
+    """
+    import os
+
+    import snowflake.connector
+
+    return snowflake.connector.connect(
+        account=account,
+        user=user,
+        authenticator="SNOWFLAKE_JWT",
+        private_key_file=os.path.expanduser(private_key_path),
+        database=database,
+        schema="RAW",
+        session_parameters={"QUERY_TAG": query_tag},
+    )

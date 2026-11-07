@@ -1,5 +1,5 @@
 # Laptop-only settings. Docker Compose merges this file over docker-compose.yaml automatically.
-# On EC2 (Stage 7) an IAM role provides credentials instead, and this file is not used.
+# On EC2 (Stage 7) an IAM role and Secrets Manager provide credentials; this file is not used.
 
 x-local-aws: &local-aws
   environment:
@@ -14,6 +14,11 @@ x-local-aws: &local-aws
 
 services:
   # Tasks run inside the scheduler with LocalExecutor.
-  airflow-scheduler: *local-aws
-  # Deferrable sensors (later) poll from here.
+  airflow-scheduler:
+    <<: *local-aws
+    volumes:
+      - ${HOME}/.aws:/home/airflow/.aws
+      # SVC_AIRFLOW's private key for Snowflake: one file, read-only.
+      - ${HOME}/.snowflake/keys/svc_airflow_rsa_key.p8:/opt/airflow/keys/svc_airflow_rsa_key.p8:ro
+  # Deferrable tasks poll from here; it never talks to Snowflake.
   airflow-triggerer: *local-aws
