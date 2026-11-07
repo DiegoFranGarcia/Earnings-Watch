@@ -9,6 +9,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.0"
     }
+    snowflake = {
+      source  = "snowflakedb/snowflake"
+      version = "= 2.22.0" # pinned exactly: newer releases were under two weeks old
+    }
   }
 }
 
