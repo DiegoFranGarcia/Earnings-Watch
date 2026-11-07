@@ -1,0 +1,58 @@
+version: 2
+
+models:
+  - name: int_facts__discrete_quarters
+    description: >
+      Grain: one row per company, metric and quarter end. Flows are true three-month values,
+      reported directly when a 3-month figure exists and otherwise derived from year-to-date
+      figures (Q2 = H1 - Q1, Q3 = 9M - H1, Q4 = FY - 9M); instants are the quarter-end
+      balance. Both first-reported and latest values, with when each became knowable.
+    columns:
+      - name: quarter_key
+        data_tests: [unique, not_null]
+      - name: is_derived
+        data_tests: [not_null]
+      - name: source_duration_quarters
+        description: 0 for an instant, 1 for a reported quarter, 2-4 for the year-to-date span a derived quarter came from.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1, 2, 3, 4]
+                quote: false
+
+unit_tests:
+  - name: year_to_date_flows_become_true_quarters
+    description: >
+      The plan's case: year-to-date 100, 250, 400 and an annual 600 give quarters 100, 150,
+      150 and 200, labelled Q1-Q4 of fiscal 2024. Latest values derive the same way (an annual
+      figure restated to 620 makes Q4 220). A directly reported quarter beats a derived one;
+      a year-to-date figure with no earlier partner yields nothing; instants pass through.
+    model: int_facts__discrete_quarters
+    given:
+      - input: ref('metrics')
+        rows:
+          - {metric: operating_cash_flow, kind: flow}
+          - {metric: net_income, kind: flow}
+          - {metric: revenue, kind: flow}
+          - {metric: total_assets, kind: instant}
+      - input: ref('int_facts__versions')
+        rows:
+          - {cik: 1, metric: operating_cash_flow, value_date: "2024-03-31", duration_quarters: 1, first_reported_value: 100, latest_value: 100, first_reported_at: "2024-05-01 09:00:00", latest_reported_at: "2024-05-01 09:00:00"}
+          - {cik: 1, metric: operating_cash_flow, value_date: "2024-06-30", duration_quarters: 2, first_reported_value: 250, latest_value: 250, first_reported_at: "2024-08-01 09:00:00", latest_reported_at: "2024-08-01 09:00:00"}
+          - {cik: 1, metric: operating_cash_flow, value_date: "2024-09-30", duration_quarters: 3, first_reported_value: 400, latest_value: 400, first_reported_at: "2024-11-01 09:00:00", latest_reported_at: "2024-11-01 09:00:00"}
+          - {cik: 1, metric: operating_cash_flow, value_date: "2024-12-31", duration_quarters: 4, first_reported_value: 600, latest_value: 620, first_reported_at: "2025-02-15 09:00:00", latest_reported_at: "2025-06-01 09:00:00"}
+          - {cik: 1, metric: net_income, value_date: "2024-03-31", duration_quarters: 1, first_reported_value: 100, latest_value: 100, first_reported_at: "2024-05-01 09:00:00", latest_reported_at: "2024-05-01 09:00:00"}
+          - {cik: 1, metric: net_income, value_date: "2024-06-30", duration_quarters: 1, first_reported_value: 140, latest_value: 140, first_reported_at: "2024-08-01 09:00:00", latest_reported_at: "2024-08-01 09:00:00"}
+          - {cik: 1, metric: net_income, value_date: "2024-06-30", duration_quarters: 2, first_reported_value: 250, latest_value: 250, first_reported_at: "2024-08-01 09:00:00", latest_reported_at: "2024-08-01 09:00:00"}
+          - {cik: 1, metric: revenue, value_date: "2024-09-30", duration_quarters: 3, first_reported_value: 900, latest_value: 900, first_reported_at: "2024-11-01 09:00:00", latest_reported_at: "2024-11-01 09:00:00"}
+          - {cik: 1, metric: total_assets, value_date: "2024-12-31", duration_quarters: 0, first_reported_value: 5000, latest_value: 5000, first_reported_at: "2025-02-15 09:00:00", latest_reported_at: "2025-02-15 09:00:00"}
+    expect:
+      rows:
+        - {metric: operating_cash_flow, period_end: "2024-03-31", fiscal_year: 2024, fiscal_quarter: 1, first_reported_value: 100, latest_value: 100, is_derived: false}
+        - {metric: operating_cash_flow, period_end: "2024-06-30", fiscal_year: 2024, fiscal_quarter: 2, first_reported_value: 150, latest_value: 150, is_derived: true}
+        - {metric: operating_cash_flow, period_end: "2024-09-30", fiscal_year: 2024, fiscal_quarter: 3, first_reported_value: 150, latest_value: 150, is_derived: true}
+        - {metric: operating_cash_flow, period_end: "2024-12-31", fiscal_year: 2024, fiscal_quarter: 4, first_reported_value: 200, latest_value: 220, is_derived: true}
+        - {metric: net_income, period_end: "2024-03-31", fiscal_year: 2024, fiscal_quarter: 1, first_reported_value: 100, latest_value: 100, is_derived: false}
+        - {metric: net_income, period_end: "2024-06-30", fiscal_year: 2024, fiscal_quarter: 2, first_reported_value: 140, latest_value: 140, is_derived: false}
+        - {metric: total_assets, period_end: "2024-12-31", fiscal_year: 2024, fiscal_quarter: 4, first_reported_value: 5000, latest_value: 5000, is_derived: false}
