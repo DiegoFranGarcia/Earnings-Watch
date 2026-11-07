@@ -16,7 +16,8 @@ eligible as (
         numbers.tag,
         numbers.value_date,
         numbers.duration_quarters,
-        numbers.value
+        numbers.value,
+        numbers.loaded_at
     from numbers
     inner join tag_map
         on numbers.tag = tag_map.tag
@@ -35,7 +36,8 @@ select
     tag,
     value_date,
     duration_quarters,
-    value
+    value,
+    loaded_at
 from eligible
 qualify row_number() over (
     partition by accession_number, metric, value_date, duration_quarters

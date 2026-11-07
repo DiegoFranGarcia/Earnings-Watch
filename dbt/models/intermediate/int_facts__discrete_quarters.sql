@@ -36,6 +36,7 @@ reported_directly as (
         latest_value,
         first_reported_at as first_known_at,
         latest_reported_at as latest_known_at,
+        last_loaded_at,
         duration_quarters as source_duration_quarters,
         false as is_derived
     from flows
@@ -56,7 +57,8 @@ derived as (
             as first_reported_value,
         year_to_date.latest_value - earlier.latest_value as latest_value,
         greatest(year_to_date.first_reported_at, earlier.first_reported_at) as first_known_at,
-        greatest(year_to_date.latest_reported_at, earlier.latest_reported_at) as latest_known_at
+        greatest(year_to_date.latest_reported_at, earlier.latest_reported_at) as latest_known_at,
+        greatest(year_to_date.last_loaded_at, earlier.last_loaded_at) as last_loaded_at
     from flows as year_to_date
     inner join flows as earlier
         on
@@ -76,6 +78,7 @@ flow_candidates as (
         latest_value,
         first_known_at,
         latest_known_at,
+        last_loaded_at,
         source_duration_quarters,
         is_derived
     from reported_directly
@@ -88,6 +91,7 @@ flow_candidates as (
         latest_value,
         first_known_at,
         latest_known_at,
+        last_loaded_at,
         source_duration_quarters,
         is_derived
     from derived
@@ -112,6 +116,7 @@ instant_quarters as (
         latest_value,
         first_reported_at as first_known_at,
         latest_reported_at as latest_known_at,
+        last_loaded_at,
         duration_quarters as source_duration_quarters,
         false as is_derived
     from reported_facts
@@ -133,6 +138,7 @@ select
     quarters.latest_value,
     quarters.first_known_at,
     quarters.latest_known_at,
+    quarters.last_loaded_at,
     quarters.source_duration_quarters,
     quarters.is_derived,
     -- The fiscal year is named after the calendar year in which it ends.

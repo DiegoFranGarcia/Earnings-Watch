@@ -18,6 +18,7 @@ reports as (
         facts.duration_quarters,
         facts.value,
         facts.accession_number,
+        facts.loaded_at,
         filings.accepted_at,
         row_number() over (
             partition by facts.cik, facts.metric, facts.value_date, facts.duration_quarters
@@ -45,7 +46,9 @@ summarised as (
         max(iff(report_order = report_count, value, null)) as latest_value,
         max(iff(report_order = report_count, accession_number, null))
             as latest_accession_number,
-        max(iff(report_order = report_count, accepted_at, null)) as latest_reported_at
+        max(iff(report_order = report_count, accepted_at, null)) as latest_reported_at,
+        -- When any report of this fact last arrived: drives incremental rebuilds downstream.
+        max(loaded_at) as last_loaded_at
     from reports
     group by cik, metric, value_date, duration_quarters
 )
@@ -63,6 +66,7 @@ select
     latest_value,
     latest_accession_number,
     latest_reported_at,
+    last_loaded_at,
     md5(cik || '|' || metric || '|' || value_date || '|' || duration_quarters) as fact_key,
     latest_value - first_reported_value as restatement_amount,
     -- Material change only: rounding between filings is not a restatement. A first value

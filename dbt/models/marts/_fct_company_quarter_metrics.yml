@@ -1,0 +1,65 @@
+version: 2
+
+models:
+  - name: fct_company_quarter_metrics
+    description: >
+      Grain: one row per company, metric and quarter end. First-reported and latest values
+      (true three-month values for flows), when each became knowable, whether the quarter was
+      derived from year-to-date figures, and whether it was materially restated. Joined to
+      the company version current when the quarter first became knowable. Incremental: each
+      run rebuilds every (company, metric) whose numbers changed, from full history.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: quarter_key
+        data_type: varchar
+        data_tests: [unique, not_null]
+      - name: cik
+        data_type: bigint
+        data_tests: [not_null]
+      - name: company_key
+        data_type: varchar
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_company')
+                field: company_key
+      - name: metric
+        data_type: varchar
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('metrics')
+                field: metric
+      - name: period_end
+        data_type: date
+        data_tests: [not_null]
+      - name: fiscal_year
+        data_type: integer
+      - name: fiscal_quarter
+        data_type: integer
+      - name: first_reported_value
+        data_type: decimal(28, 4)
+        data_tests: [not_null]
+      - name: latest_value
+        data_type: decimal(28, 4)
+        data_tests: [not_null]
+      - name: first_known_at
+        data_type: timestamp_ntz
+        data_tests: [not_null]
+      - name: latest_known_at
+        data_type: timestamp_ntz
+      - name: is_derived
+        data_type: boolean
+      - name: source_duration_quarters
+        data_type: integer
+      - name: is_restated
+        data_type: boolean
+      - name: last_loaded_at
+        data_type: timestamp_ntz
+        data_tests: [not_null]
+      - name: restatement_amount
+        data_type: decimal(28, 4)
