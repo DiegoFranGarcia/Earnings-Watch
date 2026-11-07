@@ -1,0 +1,41 @@
+version: 2
+
+models:
+  - name: int_company__attribute_changes
+    description: >
+      Grain: one row per company version (cik, version_number). A version is a run of
+      consecutive filings whose name, SIC code, state of incorporation, fiscal year end and
+      filer status are all identical, as recorded on each filing (gaps and islands).
+    columns:
+      - name: cik
+        data_tests: [not_null]
+      - name: version_number
+        data_tests: [not_null]
+      - name: valid_from
+        data_tests: [not_null]
+
+unit_tests:
+  - name: a_name_that_changes_back_is_a_new_version
+    description: >
+      A -> A -> B -> A is three versions, not two: the repeated A collapses, and the return
+      to A starts a new version instead of merging with the first. Also: a missing value
+      that becomes known is a change, and a first filing with nothing known still counts.
+    model: int_company__attribute_changes
+    given:
+      - input: ref('stg_sec__submissions')
+        rows:
+          - {cik: 1, accession_number: "a1", accepted_at: "2010-03-01 09:00:00", company_name: "ACME INC"}
+          - {cik: 1, accession_number: "a2", accepted_at: "2011-03-01 09:00:00", company_name: "ACME INC"}
+          - {cik: 1, accession_number: "a3", accepted_at: "2014-03-01 09:00:00", company_name: "ACME CORP"}
+          - {cik: 1, accession_number: "a4", accepted_at: "2019-03-01 09:00:00", company_name: "ACME INC"}
+          - {cik: 2, accession_number: "b1", accepted_at: "2012-05-01 09:00:00", company_name: "BETA", incorporation_state: null}
+          - {cik: 2, accession_number: "b2", accepted_at: "2013-05-01 09:00:00", company_name: "BETA", incorporation_state: "DE"}
+          - {cik: 3, accession_number: "c1", accepted_at: "2015-01-01 09:00:00"}
+    expect:
+      rows:
+        - {cik: 1, version_number: 1, company_name: "ACME INC", first_accession_number: "a1", filing_count: 2}
+        - {cik: 1, version_number: 2, company_name: "ACME CORP", first_accession_number: "a3", filing_count: 1}
+        - {cik: 1, version_number: 3, company_name: "ACME INC", first_accession_number: "a4", filing_count: 1}
+        - {cik: 2, version_number: 1, company_name: "BETA", first_accession_number: "b1", filing_count: 1}
+        - {cik: 2, version_number: 2, company_name: "BETA", first_accession_number: "b2", filing_count: 1}
+        - {cik: 3, version_number: 1, company_name: null, first_accession_number: "c1", filing_count: 1}

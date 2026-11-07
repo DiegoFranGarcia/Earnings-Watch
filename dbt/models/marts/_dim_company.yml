@@ -1,0 +1,46 @@
+version: 2
+
+models:
+  - name: dim_company
+    description: >
+      Type 2 company dimension. Grain: one row per company version. Rebuilt from the
+      attributes recorded on every filing since 2009; a version is valid from its first
+      filing until the next version's first filing, and the current version has no valid_to.
+      Facts join to the version whose window contains their filing's acceptance time.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: company_key
+        description: Surrogate key for one company version.
+        data_type: varchar
+        data_tests: [unique, not_null]
+      - name: cik
+        data_type: bigint
+        data_tests: [not_null]
+      - name: version_number
+        data_type: integer
+        data_tests: [not_null]
+      - name: company_name
+        data_type: varchar
+      - name: sic
+        data_type: integer
+      - name: incorporation_state
+        data_type: varchar
+      - name: fiscal_year_end
+        data_type: varchar
+      - name: filer_status
+        data_type: varchar
+      - name: valid_from
+        data_type: timestamp_ntz
+        data_tests: [not_null]
+      - name: valid_to
+        description: The next version's valid_from; null for the current version.
+        data_type: timestamp_ntz
+      - name: is_current
+        data_type: boolean
+        data_tests: [not_null]
+      - name: first_accession_number
+        data_type: varchar
+      - name: filing_count
+        data_type: integer
