@@ -15,8 +15,6 @@ and tested models.
 
 > A screen for where to look harder, **not investment advice**.
 
-![The earnings-quality screener](docs/images/dashboard.png)
-
 ## In numbers
 
 | | |
