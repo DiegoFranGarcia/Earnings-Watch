@@ -173,3 +173,32 @@ resource "snowflake_grant_privileges_to_account_role" "read_future" {
     }
   }
 }
+
+# -- service users -----------------------------------------------------------------
+
+locals {
+  # A .pub file minus its "-----BEGIN/END PUBLIC KEY-----" lines, as the one line Snowflake wants.
+  public_keys = {
+    for name, user in var.service_users : name => join("", [
+      for line in split("\n", trimspace(file(pathexpand(user.public_key_path)))) :
+      trimspace(line) if !startswith(trimspace(line), "-----")
+    ])
+  }
+}
+
+resource "snowflake_service_user" "this" {
+  for_each = var.service_users
+
+  name              = each.key
+  default_role      = snowflake_account_role.this[each.value.role].name
+  default_warehouse = snowflake_warehouse.this[each.value.warehouse].name
+  rsa_public_key    = local.public_keys[each.key]
+  comment           = "Key-pair login only; role ${each.value.role}"
+}
+
+resource "snowflake_grant_account_role" "service_user" {
+  for_each = var.service_users
+
+  role_name = snowflake_account_role.this[each.value.role].name
+  user_name = snowflake_service_user.this[each.key].name
+}

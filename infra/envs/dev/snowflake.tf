@@ -30,6 +30,24 @@ provider "snowflake" {
 
 module "snowflake" {
   source = "../../modules/snowflake"
+
+  # One user per program, each with its own key pair in ~/.snowflake/keys/ (never in git).
+  service_users = {
+    SVC_AIRFLOW   = { role = "LOADER", warehouse = "WH_LOAD", public_key_path = "~/.snowflake/keys/svc_airflow_rsa_key.pub" }
+    SVC_DBT       = { role = "TRANSFORMER", warehouse = "WH_TRANSFORM", public_key_path = "~/.snowflake/keys/svc_dbt_rsa_key.pub" }
+    SVC_STREAMLIT = { role = "REPORTER", warehouse = "WH_REPORTING", public_key_path = "~/.snowflake/keys/svc_streamlit_rsa_key.pub" }
+  }
+}
+
+module "snowflake_lake_access" {
+  source = "../../modules/snowflake_lake_access"
+
+  env         = "dev"
+  account_id  = data.aws_caller_identity.current.account_id
+  bucket_name = module.lake.bucket_name
+  bucket_arn  = module.lake.bucket_arn
+  database    = module.snowflake.schemas["EARNINGSWATCH_DEV.RAW"].database
+  loader_role = module.snowflake.role_names["LOADER"]
 }
 
 output "snowflake_databases" {
@@ -42,4 +60,16 @@ output "snowflake_warehouses" {
 
 output "snowflake_roles" {
   value = module.snowflake.roles
+}
+
+output "snowflake_service_users" {
+  value = module.snowflake.service_users
+}
+
+output "snowflake_stage" {
+  value = module.snowflake_lake_access.stage
+}
+
+output "snowflake_read_role_arn" {
+  value = module.snowflake_lake_access.snowflake_read_role_arn
 }
