@@ -9,6 +9,10 @@ The same file runs on a laptop and on EMR Serverless. It:
 - replaces exactly this quarter's silver partitions (dynamic partition overwrite);
 - writes a reconciliation record beside silver.
 
+Several quarters in one job (each still reconciled and verified on its own):
+
+    ... --quarters 2009q2..2026q3 --bronze-root s3://<lake>/bronze/source=fsds ...
+
 Local run, from the repository root:
 
     uv run python spark/jobs/fsds_to_silver.py --local --quarter 2026q3 \
@@ -33,6 +37,7 @@ from pyspark.errors import AnalysisException  # noqa: E402
 from pyspark.sql import DataFrame, SparkSession  # noqa: E402
 from pyspark.sql import functions as F  # noqa: E402
 
+from lib.quarters import expand  # noqa: E402
 from lib.schemas import NUM_CASTS, NUM_COLUMNS, NUM_KEY, SUB_CASTS, SUB_COLUMNS  # noqa: E402
 from lib.transforms import (  # noqa: E402
     count_cast_failures,
@@ -210,26 +215,84 @@ def _enforce(rec: Reconciliation, quarantine_limit: float) -> None:
             )
 
 
+def run_many(
+    spark: SparkSession,
+    quarters: list[str],
+    bronze_root: str,
+    silver_root: str,
+    quarantine_limit: float = QUARANTINE_LIMIT,
+) -> tuple[list[Reconciliation], list[tuple[str, str]]]:
+    """Convert quarters one after another in this session; a failed quarter does not stop
+    the rest. Returns the reconciliations and the (quarter, error) failures."""
+    done: list[Reconciliation] = []
+    failed: list[tuple[str, str]] = []
+    for quarter in quarters:
+        try:
+            done.append(run(spark, quarter, bronze_root, silver_root, quarantine_limit))
+            _print_line(done[-1])
+        except Exception as exc:  # noqa: BLE001 - recorded, reported, and fails the job below
+            failed.append((quarter, f"{type(exc).__name__}: {exc}".splitlines()[0][:300]))
+            print(f"{quarter:<8} FAILED  {failed[-1][1]}", flush=True)
+        finally:
+            spark.catalog.clearCache()  # each quarter caches its data; release it before the next
+    return done, failed
+
+
+def _print_line(rec: Reconciliation) -> None:
+    print(
+        f"{rec.quarter:<8} sub {rec.sub.rows_written:>8,}  num {rec.num.rows_written:>11,}  "
+        f"quarantined {rec.sub.rows_quarantined + rec.num.rows_quarantined:>5,}  "
+        f"cast fails {rec.sub.cast_failures + rec.num.cast_failures:>5,}  "
+        f"dupes {rec.num.duplicates_removed:>7,}  "
+        f"conflicts {rec.rows_with_conflicting_values:>6,}  {rec.seconds:>6.1f}s",
+        flush=True,
+    )
+
+
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Convert one FSDS quarter to silver Parquet.")
-    parser.add_argument("--quarter", required=True, help="for example 2026q3")
+    parser = argparse.ArgumentParser(description="Convert FSDS quarters to silver Parquet.")
+    which = parser.add_mutually_exclusive_group(required=True)
+    which.add_argument("--quarter", help="one quarter, for example 2026q3")
+    which.add_argument("--quarters", help="a list or range, for example 2009q2..2026q3")
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--bronze-root", help="folder holding quarter=YYYYqN/")
     source.add_argument("--bronze-folder", help="the exact folder holding sub.txt and num.txt")
     parser.add_argument("--silver-root", required=True, help="silver folder or s3:// prefix")
     parser.add_argument("--local", action="store_true", help="run on this machine's cores")
     args = parser.parse_args(argv)
+    if args.quarters and args.bronze_folder:
+        parser.error("--bronze-folder names one quarter's folder: use it with --quarter")
 
     spark = session(local=args.local)
     print(f"spark master: {spark.sparkContext.master}")
     spark.sparkContext.setLogLevel("WARN")
-    rec = run(
-        spark,
-        args.quarter.strip().lower(),
-        args.bronze_root,
-        args.silver_root,
-        bronze_folder=args.bronze_folder,
-    )
+
+    if args.quarter:
+        rec = run(
+            spark,
+            args.quarter.strip().lower(),
+            args.bronze_root,
+            args.silver_root,
+            bronze_folder=args.bronze_folder,
+        )
+        _print_table(rec)
+        spark.stop()
+        return
+
+    quarters = expand(args.quarters)
+    print(f"converting {len(quarters)} quarters: {quarters[0]}..{quarters[-1]}", flush=True)
+    started = time.perf_counter()
+    done, failed = run_many(spark, quarters, args.bronze_root, args.silver_root)
+    spark.stop()
+    rows = sum(r.num.rows_written for r in done)
+    print(f"\n{len(done)} quarters converted, {len(failed)} failed, "
+          f"{rows:,} numbers written in {time.perf_counter() - started:.0f}s")  # fmt: skip
+    if failed:
+        print("failed quarters: " + ", ".join(q for q, _ in failed))
+        sys.exit(1)  # a non-zero exit marks the EMR job FAILED
+
+
+def _print_table(rec: Reconciliation) -> None:
     print(f"\n{'table':<5} {'expected':>12} {'read':>12} {'quarantined':>12} "
           f"{'cast fails':>11} {'dupes':>7} {'written':>12}")  # fmt: skip
     for check in (rec.sub, rec.num):
@@ -242,7 +305,6 @@ def main(argv: list[str] | None = None) -> None:
     print(f"keys with conflicting values (kept, flagged): {rec.keys_with_conflicting_values:,} "
           f"({rec.rows_with_conflicting_values:,} rows)")  # fmt: skip
     print(f"\n{rec.quarter} converted in {rec.seconds}s")
-    spark.stop()
 
 
 if __name__ == "__main__":

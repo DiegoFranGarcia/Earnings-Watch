@@ -98,3 +98,16 @@ def test_an_exact_bronze_folder_can_be_given(spark, tmp_path) -> None:
     rec = run(spark, QUARTER, None, str(tmp_path / "silver"), 1.0, bronze_folder=str(versioned))
 
     assert rec.num.rows_read == 11
+
+
+def test_run_many_carries_on_past_a_failed_quarter(spark, tmp_path) -> None:
+    from jobs.fsds_to_silver import run_many
+
+    bronze, silver = tmp_path / "bronze", tmp_path / "silver"
+    awkward_quarter(bronze)  # 2026q3 exists; 2026q2 does not
+
+    done, failed = run_many(spark, ["2026q2", "2026q3"], str(bronze), str(silver), 1.0)
+
+    assert [r.quarter for r in done] == ["2026q3"], "the good quarter still converts"
+    assert [q for q, _ in failed] == ["2026q2"]
+    assert (silver / "fsds" / "num" / "source_quarter=2026q3").is_dir()
