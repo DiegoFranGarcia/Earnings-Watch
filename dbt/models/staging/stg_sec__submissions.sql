@@ -1,6 +1,6 @@
 -- One row per filing. Renames only: no filters, no joins, no business logic.
 with source as (
-    select * from {{ source('silver', 'sub') }}
+    select * from {{ source('raw', 'fsds_sub') }}
 )
 
 select
@@ -16,5 +16,5 @@ select
     filed as filed_date,
     afs as filer_status,
     prevrpt as was_later_amended,
-    source_quarter
+    _source_quarter as source_quarter
 from source

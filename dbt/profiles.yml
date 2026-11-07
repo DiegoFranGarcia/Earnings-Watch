@@ -1,9 +1,17 @@
-# Connection settings. No secrets: the slice uses a local DuckDB file.
-# Stage 3 adds a Snowflake target here, with credentials from environment variables.
+# Connection settings. No secrets here: dbt logs in to Snowflake as SVC_DBT with a key pair
+# kept outside the repository (~/.snowflake/keys/). Values can be overridden by environment.
 earningswatch:
-  target: slice
+  target: dev
   outputs:
-    slice:
-      type: duckdb
-      path: "{{ env_var('EW_DUCKDB_PATH', '../data/earningswatch.duckdb') }}"
+    dev:
+      type: snowflake
+      account: "{{ env_var('DBT_SNOWFLAKE_ACCOUNT', 'TOHCGIQ-QM22072') }}"
+      user: "{{ env_var('DBT_SNOWFLAKE_USER', 'SVC_DBT') }}"
+      private_key_path: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PATH', env_var('HOME', '') ~ '/.snowflake/keys/svc_dbt_rsa_key.p8') }}"
+      role: TRANSFORMER
+      warehouse: WH_TRANSFORM
+      database: "{{ env_var('DBT_SNOWFLAKE_DATABASE', 'EARNINGSWATCH_DEV') }}"
+      schema: STAGING
       threads: 4
+      # Every statement dbt runs is tagged, so its credits can be attributed.
+      query_tag: "earningswatch:dbt:{{ env_var('DBT_RUN_LABEL', 'manual') }}"

@@ -19,6 +19,11 @@ models:
               arguments:
                 to: ref('stg_sec__submissions')
                 field: accession_number
+              config:
+                # Source data, not our transformation: the SEC's 2013q1 data set holds 1,953
+                # numbers from 4 filings it never lists. They cannot reach the mart (filings
+                # are inner-joined), so this warns and stays visible instead of failing.
+                severity: warn
       - name: duration_quarters
         description: >
           Quarters the number covers: 0 is a point in time, 1 a quarter, 4 a year. Longer spans

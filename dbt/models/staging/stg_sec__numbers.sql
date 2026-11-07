@@ -1,6 +1,6 @@
 -- One row per number reported in a filing. Renames only.
 with source as (
-    select * from {{ source('silver', 'num') }}
+    select * from {{ source('raw', 'fsds_num') }}
 )
 
 select
@@ -14,5 +14,5 @@ select
     value,
     is_entity_total,
     has_key_conflict,
-    source_quarter
+    _source_quarter as source_quarter
 from source

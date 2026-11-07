@@ -36,8 +36,10 @@ select
         as operating_cash_flow_change,
     -- Accruals: the part of profit not (yet) backed by cash.
     cast(net_income - operating_cash_flow as decimal(28, 4)) as accruals,
+    -- A ratio, so a float everywhere: Snowflake would otherwise keep decimal division.
+    cast((net_income - operating_cash_flow) / nullif(total_assets, 0) as double)
+        as accruals_to_assets,
     ytd_quarters * 3 as months_covered,
-    (net_income - operating_cash_flow) / nullif(total_assets, 0) as accruals_to_assets,
     -- Banks and insurers (SIC 6000-6999): operating cash flow means something else there.
     coalesce(sic between 6000 and 6999, false) as is_financial,
     -- Screen only filings whose industry is known and not financial. Many investment funds

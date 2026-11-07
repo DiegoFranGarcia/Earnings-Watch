@@ -10,14 +10,18 @@ test-paths: ["tests"]
 models:
   earningswatch:
     staging:
+      +schema: staging
       +materialized: view
     intermediate:
-      +materialized: view
+      +schema: intermediate
+      +materialized: table   # built once, so tests do not re-scan 189 million RAW rows
     marts:
+      +schema: marts
       +materialized: table
 
 seeds:
   earningswatch:
+    +schema: staging
     metric_tag_map:
       +column_types:
         metric: varchar

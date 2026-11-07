@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "Flags public companies whose reported earnings outrun their cash, from SEC EDGAR filings."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-dependencies = []
+dependencies = [
+    "dbt-snowflake==1.12.3",
+]
 
 [dependency-groups]
 dev = [
