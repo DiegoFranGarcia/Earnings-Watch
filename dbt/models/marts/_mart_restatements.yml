@@ -62,6 +62,12 @@ models:
         data_tests: [unique, not_null]
       - name: days_to_first_change
         data_type: integer
+      - name: is_likely_scale_error
+        description: >
+          The value changed by about 1,000x (or 1/1,000x): almost always a units mistake in
+          the tagging, not a real restatement. Exclude these from restatement analysis.
+        data_type: boolean
+        data_tests: [not_null]
       - name: restatement_kind
         data_type: varchar
         data_tests:

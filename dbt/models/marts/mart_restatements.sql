@@ -47,6 +47,21 @@ select
         || '|' || versions.duration_quarters
     ) as restatement_key,
     datediff(day, versions.first_reported_at, versions.first_change_at) as days_to_first_change,
+    -- A change of about 1,000x (or 1/1,000x) is almost always a units mistake in the tagging
+    -- (thousands tagged as dollars), not a real restatement.
+    -- Divided as doubles with nullif: SQL does not promise to evaluate "x != 0 and y / x" left
+    -- to right, so a zero check cannot guard a division, and decimals could overflow.
+    coalesce(
+        abs(
+            cast(versions.latest_value as double)
+            / nullif(cast(versions.first_reported_value as double), 0)
+        ) between 900 and 1100
+        or abs(
+            cast(versions.first_reported_value as double)
+            / nullif(cast(versions.latest_value as double), 0)
+        ) between 900 and 1100,
+        false
+    ) as is_likely_scale_error,
     case
         when versions.first_change_tag is distinct from versions.first_reported_tag
             then 'tag_switch'

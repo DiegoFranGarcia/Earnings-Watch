@@ -1,0 +1,45 @@
+version: 2
+
+models:
+  - name: mart_filing_timeliness
+    description: >
+      Grain: one row per filer status, form (10-K or 10-Q) and period year. Counts of filings
+      on time, within a late-filing notice's extension, and late, with how long filers took.
+      Notices are known only from 2025 (notice_data_available), so earlier years count
+      filings that used an extension as late.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: filer_status
+        data_type: varchar
+        data_tests: [not_null]
+      - name: form
+        data_type: varchar
+        data_tests: [not_null]
+      - name: period_year
+        data_type: integer
+        data_tests: [not_null]
+      - name: filings
+        data_type: integer
+      - name: on_time_filings
+        data_type: integer
+      - name: within_extension_filings
+        data_type: integer
+      - name: late_filings
+        data_type: integer
+      - name: late_notices
+        data_type: integer
+      - name: median_days_to_file
+        data_type: number
+      - name: p90_days_to_file
+        data_type: number
+      - name: median_days_past_due_when_late
+        data_type: number
+      - name: notice_data_available
+        data_type: boolean
+      - name: on_time_share
+        data_type: double
+      - name: timeliness_key
+        data_type: varchar
+        data_tests: [unique, not_null]

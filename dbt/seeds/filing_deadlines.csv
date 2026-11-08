@@ -1,0 +1,11 @@
+filer_status,form,deadline_days,extension_days
+1-LAF,10-K,60,15
+2-ACC,10-K,75,15
+3-SRA,10-K,75,15
+4-NON,10-K,90,15
+5-SML,10-K,90,15
+1-LAF,10-Q,40,5
+2-ACC,10-Q,40,5
+3-SRA,10-Q,40,5
+4-NON,10-Q,45,5
+5-SML,10-Q,45,5

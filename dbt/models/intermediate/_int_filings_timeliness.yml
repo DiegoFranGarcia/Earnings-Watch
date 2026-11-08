@@ -1,0 +1,53 @@
+version: 2
+
+models:
+  - name: int_filings__timeliness
+    description: >
+      Grain: one row per original 10-K or 10-Q (accession number). Its deadline by the filer
+      status recorded on the filing (weekend deadlines move to Monday; holidays are not
+      modelled), any matching late-filing notice, and its timeliness: on_time,
+      within_extension (late, covered by a notice's 15 or 5 extra days), or late. Notices
+      are known only from 2025-01-02 (notice_data_available).
+    columns:
+      - name: accession_number
+        data_tests: [unique, not_null]
+      - name: due_date
+        data_tests: [not_null]
+      - name: timeliness
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [on_time, within_extension, late]
+
+unit_tests:
+  - name: deadlines_follow_the_sec_rules
+    description: >
+      A large accelerated filer's 10-K due on Saturday 2025-03-01 is due Monday, so filing on
+      Monday is on time. A 10-Q filed four days late after a late-filing notice is within its
+      5-day extension. A 10-K filed a month late is late even with a notice (15 days allowed).
+      A late 10-Q without a notice is late. Amendments are not measured.
+    model: int_filings__timeliness
+    given:
+      - input: ref('dim_filing')
+        rows:
+          - {accession_number: "f1", cik: 1, form: "10-K", filer_status: "1-LAF", period_end: "2024-12-31", filed_date: "2025-03-03"}
+          - {accession_number: "f2", cik: 2, form: "10-Q", filer_status: "4-NON", period_end: "2025-03-31", filed_date: "2025-05-19"}
+          - {accession_number: "f3", cik: 3, form: "10-K", filer_status: "5-SML", period_end: "2024-12-31", filed_date: "2025-05-01"}
+          - {accession_number: "f4", cik: 4, form: "10-Q", filer_status: "4-NON", period_end: "2025-06-30", filed_date: "2025-08-20"}
+          - {accession_number: "f5", cik: 1, form: "10-K/A", filer_status: "1-LAF", period_end: "2024-12-31", filed_date: "2025-09-01"}
+      - input: ref('filing_deadlines')
+        rows:
+          - {filer_status: "1-LAF", form: "10-K", deadline_days: 60, extension_days: 15}
+          - {filer_status: "4-NON", form: "10-Q", deadline_days: 45, extension_days: 5}
+          - {filer_status: "5-SML", form: "10-K", deadline_days: 90, extension_days: 15}
+      - input: ref('int_filings__daily_index')
+        rows:
+          - {accession_number: "n2", cik: 2, form: "NT 10-Q", filed_date: "2025-05-16"}
+          - {accession_number: "n3", cik: 3, form: "NT 10-K", filed_date: "2025-03-31"}
+    expect:
+      rows:
+        - {accession_number: "f1", due_date: "2025-03-03", days_past_due: 0, filed_late_notice: false, timeliness: on_time}
+        - {accession_number: "f2", due_date: "2025-05-15", days_past_due: 4, filed_late_notice: true, timeliness: within_extension}
+        - {accession_number: "f3", due_date: "2025-03-31", days_past_due: 31, filed_late_notice: true, timeliness: late}
+        - {accession_number: "f4", due_date: "2025-08-14", days_past_due: 6, filed_late_notice: false, timeliness: late}

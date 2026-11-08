@@ -28,6 +28,12 @@ seeds:
         kind: varchar
         statement: varchar
         description: varchar
+    filing_deadlines:
+      +column_types:
+        filer_status: varchar
+        form: varchar
+        deadline_days: integer
+        extension_days: integer
     metric_tag_map:
       +column_types:
         metric: varchar

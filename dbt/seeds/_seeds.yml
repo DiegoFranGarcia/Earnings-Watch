@@ -37,3 +37,19 @@ seeds:
                 field: metric
       - name: tag
         data_tests: [unique, not_null]
+
+  - name: filing_deadlines
+    description: >
+      SEC deadlines for 10-K and 10-Q filings, in days after the period end, by filer status
+      (1-LAF large accelerated, 2-ACC accelerated, 3-SRA smaller reporting accelerated,
+      4-NON non-accelerated, 5-SML smaller reporting), and the extra days a late-filing
+      notice (Form 12b-25: NT 10-K or NT 10-Q) grants.
+    columns:
+      - name: filer_status
+        data_tests: [not_null]
+      - name: form
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["10-K", "10-Q"]
