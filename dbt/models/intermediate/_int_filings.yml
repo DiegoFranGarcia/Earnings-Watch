@@ -1,0 +1,17 @@
+version: 2
+
+models:
+  - name: int_filings__daily_index
+    description: >
+      Grain: one row per filing and company (accession number, CIK) in EDGAR's daily index:
+      the first appearance of each pair, when the filing became public. listing_count and
+      last_index_date record how often and until when the index repeated it.
+    columns:
+      - name: accession_number
+        data_tests: [not_null]
+      - name: cik
+        data_tests: [not_null]
+      - name: first_index_date
+        data_tests: [not_null]
+      - name: listing_count
+        data_tests: [not_null]

@@ -14,8 +14,12 @@ from earningswatch.snowflake_load import (
     check_quarter,
     copy_sql,
     create_table_sql,
+    daily_index_copy_sql,
+    daily_index_pattern,
     expected_rows,
+    load_daily_index_month,
     load_quarter,
+    months_between,
     quarters_to_load,
 )
 
@@ -145,3 +149,51 @@ def test_bad_manual_input_is_refused() -> None:
     for bad in ("2026q3..2026q1", "2026q5", "next quarter"):
         with pytest.raises(ValueError):
             quarters_to_load(bad, [])
+
+
+class FakeDailyCursor:
+    """Answers the two counts of a daily-index load: rows in RAW, then rows in the files."""
+
+    def __init__(self, loaded: int, in_files: int) -> None:
+        self.answers = {"RAW.DAILY_INDEX": loaded, "@RAW.SILVER": in_files}
+        self.statements: list[str] = []
+        self._last: tuple | None = None
+
+    def execute(self, sql: str, params: tuple | None = None) -> None:
+        self.statements.append(sql)
+        if sql.startswith("SELECT COUNT(*)"):
+            source = sql.split("FROM ")[1].split()[0].rstrip("/").replace("/daily_index", "")
+            self._last = (self.answers[source],)
+
+    def fetchone(self) -> tuple | None:
+        return self._last
+
+
+def test_months_expand_across_a_year_end_and_refuse_bad_labels() -> None:
+    assert months_between("2025-11", "2026-02") == ["2025-11", "2025-12", "2026-01", "2026-02"]
+    for bad in (("2025-13", "2026-01"), ("2026-02", "2025-11"), ("2025-1", "2025-02")):
+        with pytest.raises(ValueError):
+            months_between(*bad)
+
+
+def test_daily_index_copy_reads_one_month_of_day_files_with_force() -> None:
+    sql = daily_index_copy_sql("2025-01")
+
+    assert sql.startswith("COPY INTO RAW.DAILY_INDEX (")
+    assert "FROM @RAW.SILVER/daily_index/)" in sql
+    assert "PATTERN = '.*date=2025-01-[0-9]{2}/.*[.]parquet'" in sql
+    assert "FORCE = TRUE" in sql
+    assert daily_index_pattern("2025-01") == ".*date=2025-01-[0-9]{2}/.*[.]parquet"
+
+
+def test_a_daily_index_month_commits_only_when_raw_matches_the_files() -> None:
+    good = FakeDailyCursor(loaded=120_000, in_files=120_000)
+    assert load_daily_index_month(good, "2025-01") == 120_000
+    assert [s.split()[0] for s in good.statements] == [
+        "BEGIN", "DELETE", "COPY", "SELECT", "SELECT", "COMMIT",
+    ]  # fmt: skip
+
+    short = FakeDailyCursor(loaded=0, in_files=120_000)  # the FORCE trap: nothing copied
+    with pytest.raises(LoadMismatch, match="RAW holds 0 rows, the files hold 120,000"):
+        load_daily_index_month(short, "2025-01")
+    assert short.statements[-1] == "ROLLBACK" and "COMMIT" not in short.statements

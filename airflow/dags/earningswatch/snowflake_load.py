@@ -219,3 +219,101 @@ def connect(account: str, user: str, private_key_path: str, database: str, query
         schema="RAW",
         session_parameters={"QUERY_TAG": query_tag},
     )
+
+
+# -- the daily index: every filing EDGAR accepted, one file per business day ------------
+
+_MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+
+DAILY_INDEX_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("cik", "NUMBER(19,0)"),
+    ("company_name", "VARCHAR"),
+    ("form_type", "VARCHAR"),
+    ("date_filed", "DATE"),
+    ("filename", "VARCHAR"),
+    ("accession_number", "VARCHAR"),
+)
+
+DAILY_INDEX_LINEAGE: tuple[tuple[str, str], ...] = (
+    ("_source_file", "VARCHAR"),
+    ("_source_date", "DATE"),
+    ("_loaded_at", "TIMESTAMP_NTZ"),
+)
+
+
+def check_month(month: str) -> str:
+    """Months are formatted into SQL patterns, so only exact labels like '2025-01' pass."""
+    if not _MONTH.match(month):
+        raise ValueError(f"not a month: {month!r}")
+    return month
+
+
+def months_between(first: str, last: str) -> list[str]:
+    """'2025-11'..'2026-02' -> ['2025-11', '2025-12', '2026-01', '2026-02']."""
+    year, month = map(int, check_month(first).split("-"))
+    end = tuple(map(int, check_month(last).split("-")))
+    if (year, month) > end:
+        raise ValueError(f"range runs backwards: {first}..{last}")
+    months = []
+    while (year, month) <= end:
+        months.append(f"{year}-{month:02d}")
+        year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+    return months
+
+
+def daily_index_table_sql() -> str:
+    body = ",\n    ".join(
+        f"{name} {kind}" for name, kind in (*DAILY_INDEX_COLUMNS, *DAILY_INDEX_LINEAGE)
+    )
+    return f"CREATE TABLE IF NOT EXISTS RAW.DAILY_INDEX (\n    {body}\n)"
+
+
+def daily_index_pattern(month: str) -> str:
+    """Every day file of one month: silver/daily_index/date=YYYY-MM-DD/part-0.parquet."""
+    return f".*date={check_month(month)}-[0-9]{{2}}/.*[.]parquet"
+
+
+def daily_index_copy_sql(month: str, stage: str = "RAW.SILVER") -> str:
+    targets = [name for name, _ in DAILY_INDEX_COLUMNS] + [n for n, _ in DAILY_INDEX_LINEAGE]
+    values = [f'$1:"{name}"::{kind}' for name, kind in DAILY_INDEX_COLUMNS] + [
+        "METADATA$FILENAME",
+        # The day comes from the partition folder the file sits in.
+        "to_date(regexp_substr(METADATA$FILENAME, 'date=([0-9]{4}-[0-9]{2}-[0-9]{2})', 1, 1, 'e'))",
+        "CURRENT_TIMESTAMP()::TIMESTAMP_NTZ",
+    ]
+    # Not injectable: names are module constants and the month passed check_month().
+    return (
+        f"COPY INTO RAW.DAILY_INDEX ({', '.join(targets)})\n"  # noqa: S608
+        f"FROM (SELECT {', '.join(values)}\n"
+        f"      FROM @{stage}/daily_index/)\n"
+        f"PATTERN = '{daily_index_pattern(month)}'\n"
+        "FORCE = TRUE\n"
+        "ON_ERROR = ABORT_STATEMENT"
+    )
+
+
+def load_daily_index_month(cursor, month: str, stage: str = "RAW.SILVER") -> int:
+    """Replace one month of the daily index, committing only if RAW holds exactly the rows
+    the month's silver files contain (counted by Snowflake from the files themselves)."""
+    pattern = daily_index_pattern(month)
+    first_day = f"{month}-01"
+    where = "WHERE _source_date BETWEEN %s::date AND last_day(%s::date)"
+    cursor.execute("BEGIN")
+    try:
+        cursor.execute(f"DELETE FROM RAW.DAILY_INDEX {where}", (first_day, first_day))  # noqa: S608
+        cursor.execute(daily_index_copy_sql(month, stage))
+        cursor.execute(f"SELECT COUNT(*) FROM RAW.DAILY_INDEX {where}", (first_day, first_day))  # noqa: S608
+        loaded = int(cursor.fetchone()[0])
+        cursor.execute(
+            f"SELECT COUNT(*) FROM @{stage}/daily_index/ (PATTERN => %s)",  # noqa: S608
+            (pattern,),
+        )
+        in_files = int(cursor.fetchone()[0])
+        if loaded != in_files:
+            raise LoadMismatch(f"{month}: RAW holds {loaded:,} rows, the files hold {in_files:,}")
+    except BaseException:
+        cursor.execute("ROLLBACK")
+        raise
+    cursor.execute("COMMIT")
+    log.info("Loaded daily index %s: %s rows", month, f"{loaded:,}")
+    return loaded

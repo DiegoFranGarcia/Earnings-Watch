@@ -29,3 +29,17 @@ models:
           Quarters the number covers: 0 is a point in time, 1 a quarter, 4 a year. Longer spans
           are legitimate (cumulative totals, e.g. restructuring costs to date).
         data_tests: [not_null]
+
+  - name: stg_sec__daily_index
+    description: >
+      Grain: one row per filing and company (accession number, CIK) in EDGAR's daily index,
+      for every form type, including late-filing notices (NT 10-K, NT 10-Q).
+    columns:
+      - name: accession_number
+        data_tests: [not_null]
+      - name: cik
+        data_tests: [not_null]
+      - name: form
+        data_tests: [not_null]
+      - name: filed_date
+        data_tests: [not_null]
