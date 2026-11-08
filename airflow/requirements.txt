@@ -5,3 +5,6 @@ apache-airflow-providers-snowflake
 botocore[crt]
 # Writes silver Parquet inside DAG tasks.
 pyarrow
+# Renders each dbt model as its own Airflow task. Not in Airflow's constraints, so pinned here:
+# 1.16.0 was under two weeks old when this was chosen.
+astronomer-cosmos==1.15.1

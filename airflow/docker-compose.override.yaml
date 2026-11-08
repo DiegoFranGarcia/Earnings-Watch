@@ -18,7 +18,14 @@ services:
     <<: *local-aws
     volumes:
       - ${HOME}/.aws:/home/airflow/.aws
-      # SVC_AIRFLOW's private key for Snowflake: one file, read-only.
+      # Snowflake private keys, one file each, read-only: SVC_AIRFLOW loads, SVC_DBT transforms.
       - ${HOME}/.snowflake/keys/svc_airflow_rsa_key.p8:/opt/airflow/keys/svc_airflow_rsa_key.p8:ro
-  # Deferrable tasks poll from here; it never talks to Snowflake.
+      - ${HOME}/.snowflake/keys/svc_dbt_rsa_key.p8:/opt/airflow/keys/svc_dbt_rsa_key.p8:ro
+      # The dbt project, read-only: Cosmos runs each model in a temporary copy of it.
+      - ../dbt:/opt/airflow/dbt:ro
+  # Parses DAG files; the dbt_build DAG reads the dbt manifest while parsing.
+  airflow-dag-processor:
+    volumes:
+      - ../dbt:/opt/airflow/dbt:ro
+  # Deferrable tasks poll from here; it never talks to Snowflake or runs dbt.
   airflow-triggerer: *local-aws
