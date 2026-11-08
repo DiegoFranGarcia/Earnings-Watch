@@ -38,6 +38,12 @@ vars:
   # A value counts as restated when its latest figure differs from the first-reported one by
   # more than this share of it: smaller differences are rounding (thousands vs millions).
   restatement_threshold: 0.005
+  # Earnings-quality screen: trailing-twelve-month accruals (net income minus operating cash
+  # flow) larger than this share of average total assets.
+  accrual_ratio_threshold: 0.10
+  # Only companies with at least this much average total assets (USD) are screened: below it,
+  # near-zero assets make accrual ratios explode (shell companies at hundreds of times assets).
+  minimum_average_assets: 10000000
 
 flags:
   send_anonymous_usage_stats: false

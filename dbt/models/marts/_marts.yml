@@ -3,59 +3,65 @@ version: 2
 models:
   - name: mart_earnings_quality
     description: >
-      Grain: one row per 10-Q or 10-K with this year's and last year's year-to-date net
-      income and operating cash flow. is_flagged marks income up while cash went down, among
-      screened filings only (industry known, not financial). A screen for where to look
-      harder, not advice.
+      Grain: one row per company, quarter end and reporting view (first_reported or latest).
+      Trailing-twelve-month net income and operating cash flow against the year before,
+      accruals (their difference) as a share of average total assets, and the screen:
+      is_flagged when income rose, cash did not, and accruals exceed
+      var accrual_ratio_threshold of assets, among screened companies (industry known, not
+      financial). first_reported uses only values published at the time (no look-ahead
+      bias); known_at is when the row became knowable. Companies below
+      var minimum_average_assets are not screened. A screen for where to look harder, not
+      advice.
     config:
       contract:
         enforced: true
     columns:
-      - name: accession_number
-        data_type: varchar
-        data_tests: [unique, not_null]
       - name: cik
         data_type: bigint
         data_tests: [not_null]
+      - name: company_key
+        data_type: varchar
       - name: company_name
         data_type: varchar
       - name: sic
         data_type: integer
-      - name: form
+      - name: reporting_view
         data_type: varchar
-      - name: fiscal_year
-        data_type: integer
-      - name: fiscal_period
-        data_type: varchar
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [first_reported, latest]
       - name: period_end
         data_type: date
-      - name: filed_date
-        data_type: date
-      - name: months_covered
+        data_tests: [not_null]
+      - name: fiscal_year
         data_type: integer
-      - name: net_income
-        data_type: decimal(28, 4)
-      - name: net_income_prior_year
-        data_type: decimal(28, 4)
-      - name: operating_cash_flow
-        data_type: decimal(28, 4)
-      - name: operating_cash_flow_prior_year
-        data_type: decimal(28, 4)
-      - name: total_assets
-        data_type: decimal(28, 4)
-      - name: net_income_change
-        data_type: decimal(28, 4)
-      - name: operating_cash_flow_change
-        data_type: decimal(28, 4)
-      - name: accruals
-        data_type: decimal(28, 4)
-      - name: accruals_to_assets
-        data_type: double
+      - name: fiscal_quarter
+        data_type: integer
+      - name: known_at
+        data_type: timestamp_ntz
+        data_tests: [not_null]
       - name: is_financial
         data_type: boolean
-        data_tests: [not_null]
+      - name: accruals_to_assets
+        data_type: double
+      - name: ttm_net_income
+        data_type: decimal(30, 4)
+      - name: prior_ttm_net_income
+        data_type: decimal(30, 4)
+      - name: ttm_operating_cash_flow
+        data_type: decimal(30, 4)
+      - name: prior_ttm_operating_cash_flow
+        data_type: decimal(30, 4)
+      - name: average_total_assets
+        data_type: decimal(30, 4)
+      - name: accruals
+        data_type: decimal(30, 4)
+      - name: earnings_quality_key
+        data_type: varchar
+        data_tests: [unique, not_null]
       - name: is_screened
-        description: Industry is known and not financial, so the screen applies.
         data_type: boolean
         data_tests: [not_null]
       - name: is_flagged
@@ -63,19 +69,39 @@ models:
         data_tests: [not_null]
 
 unit_tests:
-  - name: flags_only_screened_filings
+  - name: flagged_as_first_reported_but_not_after_the_restatement
     description: >
-      All three filings show income up and cash down. Only the one with a known,
-      non-financial industry is flagged; a bank and a filing with no SIC code are not.
+      Net income rises from $10m to $15m a quarter while cash flow stays at $10m: TTM income
+      $60m against $40m, cash $40m against $40m, accruals $20m on average assets of $100m (20%). As first
+      reported, flagged. Q4 2024 income is later restated from $15m to -$5m, so in the latest view
+      TTM income is $40m, there is no rise, and no flag: what investors saw at the time differs
+      from hindsight. Only the quarter with a full prior year produces a row.
     model: mart_earnings_quality
     given:
-      - input: ref('int_facts__yoy')
+      - input: ref('fct_company_quarter_metrics')
         rows:
-          - {accession_number: "OPERATING", cik: 1, sic: 3674, ytd_quarters: 2, net_income: 300, net_income_prior_year: 200, operating_cash_flow: 100, operating_cash_flow_prior_year: 180, total_assets: 1000}
-          - {accession_number: "BANK", cik: 2, sic: 6021, ytd_quarters: 2, net_income: 300, net_income_prior_year: 200, operating_cash_flow: 100, operating_cash_flow_prior_year: 180, total_assets: 1000}
-          - {accession_number: "NO_SIC_FUND", cik: 3, sic: null, ytd_quarters: 2, net_income: 300, net_income_prior_year: 200, operating_cash_flow: 100, operating_cash_flow_prior_year: 180, total_assets: 1000}
+          - {cik: 1, company_key: "k1", metric: net_income, period_end: "2023-03-31", fiscal_year: 2023, fiscal_quarter: 1, first_reported_value: 10000000, latest_value: 10000000, first_known_at: "2023-05-10 09:00:00", latest_known_at: "2023-05-10 09:00:00"}
+          - {cik: 1, company_key: "k1", metric: operating_cash_flow, period_end: "2023-03-31", fiscal_year: 2023, fiscal_quarter: 1, first_reported_value: 10000000, latest_value: 10000000, first_known_at: "2023-05-10 09:00:00", latest_known_at: "2023-05-10 09:00:00"}
+          - {cik: 1, company_key: "k1", metric: net_income, period_end: "2023-06-30", fiscal_year: 2023, fiscal_quarter: 2, first_reported_value: 10000000, latest_value: 10000000, first_known_at: "2023-08-09 09:00:00", latest_known_at: "2023-08-09 09:00:00"}
+          - {cik: 1, company_key: "k1", metric: operating_cash_flow, period_end: "2023-06-30", fiscal_year: 2023, fiscal_quarter: 2, first_reported_value: 10000000, latest_value: 10000000, first_known_at: "2023-08-09 09:00:00", latest_known_at: "2023-08-09 09:00:00"}
+          - {cik: 1, company_key: "k1", metric: net_income, period_end: "2023-09-30", fiscal_year: 2023, fiscal_quarter: 3, first_reported_value: 10000000, latest_value: 10000000, first_known_at: "2023-11-09 09:00:00", latest_known_at: "2023-11-09 09:00:00"}
+          - {cik: 1, company_key: "k1", metric: operating_cash_flow, period_end: "2023-09-30", fiscal_year: 2023, fiscal_quarter: 3, first_reported_value: 10000000, latest_value: 10000000, first_known_at: "2023-11-09 09:00:00", latest_known_at: "2023-11-09 09:00:00"}
+          - {cik: 1, company_key: "k1", metric: net_income, period_end: "2023-12-31", fiscal_year: 2023, fiscal_quarter: 4, first_reported_value: 10000000, latest_value: 10000000, first_known_at: "2024-02-09 09:00:00", latest_known_at: "2024-02-09 09:00:00"}
+          - {cik: 1, company_key: "k1", metric: operating_cash_flow, period_end: "2023-12-31", fiscal_year: 2023, fiscal_quarter: 4, first_reported_value: 10000000, latest_value: 10000000, first_known_at: "2024-02-09 09:00:00", latest_known_at: "2024-02-09 09:00:00"}
+          - {cik: 1, company_key: "k1", metric: total_assets, period_end: "2023-12-31", fiscal_year: 2023, fiscal_quarter: 4, first_reported_value: 100000000, latest_value: 100000000, first_known_at: "2024-02-09 09:00:00", latest_known_at: "2024-02-09 09:00:00"}
+          - {cik: 1, company_key: "k1", metric: net_income, period_end: "2024-03-31", fiscal_year: 2024, fiscal_quarter: 1, first_reported_value: 15000000, latest_value: 15000000, first_known_at: "2024-05-10 09:00:00", latest_known_at: "2024-05-10 09:00:00"}
+          - {cik: 1, company_key: "k1", metric: operating_cash_flow, period_end: "2024-03-31", fiscal_year: 2024, fiscal_quarter: 1, first_reported_value: 10000000, latest_value: 10000000, first_known_at: "2024-05-10 09:00:00", latest_known_at: "2024-05-10 09:00:00"}
+          - {cik: 1, company_key: "k1", metric: net_income, period_end: "2024-06-30", fiscal_year: 2024, fiscal_quarter: 2, first_reported_value: 15000000, latest_value: 15000000, first_known_at: "2024-08-09 09:00:00", latest_known_at: "2024-08-09 09:00:00"}
+          - {cik: 1, company_key: "k1", metric: operating_cash_flow, period_end: "2024-06-30", fiscal_year: 2024, fiscal_quarter: 2, first_reported_value: 10000000, latest_value: 10000000, first_known_at: "2024-08-09 09:00:00", latest_known_at: "2024-08-09 09:00:00"}
+          - {cik: 1, company_key: "k1", metric: net_income, period_end: "2024-09-30", fiscal_year: 2024, fiscal_quarter: 3, first_reported_value: 15000000, latest_value: 15000000, first_known_at: "2024-11-09 09:00:00", latest_known_at: "2024-11-09 09:00:00"}
+          - {cik: 1, company_key: "k1", metric: operating_cash_flow, period_end: "2024-09-30", fiscal_year: 2024, fiscal_quarter: 3, first_reported_value: 10000000, latest_value: 10000000, first_known_at: "2024-11-09 09:00:00", latest_known_at: "2024-11-09 09:00:00"}
+          - {cik: 1, company_key: "k1", metric: net_income, period_end: "2024-12-31", fiscal_year: 2024, fiscal_quarter: 4, first_reported_value: 15000000, latest_value: -5000000, first_known_at: "2025-02-09 09:00:00", latest_known_at: "2025-06-01 09:00:00"}
+          - {cik: 1, company_key: "k1", metric: operating_cash_flow, period_end: "2024-12-31", fiscal_year: 2024, fiscal_quarter: 4, first_reported_value: 10000000, latest_value: 10000000, first_known_at: "2025-02-09 09:00:00", latest_known_at: "2025-02-09 09:00:00"}
+          - {cik: 1, company_key: "k1", metric: total_assets, period_end: "2024-12-31", fiscal_year: 2024, fiscal_quarter: 4, first_reported_value: 100000000, latest_value: 100000000, first_known_at: "2025-02-09 09:00:00", latest_known_at: "2025-02-09 09:00:00"}
+      - input: ref('dim_company')
+        rows:
+          - {company_key: "k1", company_name: "ACME INC", sic: 3674}
     expect:
       rows:
-        - {accession_number: "OPERATING", is_financial: false, is_screened: true, is_flagged: true}
-        - {accession_number: "BANK", is_financial: true, is_screened: false, is_flagged: false}
-        - {accession_number: "NO_SIC_FUND", is_financial: false, is_screened: false, is_flagged: false}
+        - {cik: 1, reporting_view: first_reported, period_end: "2024-12-31", ttm_net_income: 60000000, prior_ttm_net_income: 40000000, ttm_operating_cash_flow: 40000000, average_total_assets: 100000000, accruals: 20000000, is_screened: true, is_flagged: true}
+        - {cik: 1, reporting_view: latest, period_end: "2024-12-31", ttm_net_income: 40000000, prior_ttm_net_income: 40000000, ttm_operating_cash_flow: 40000000, average_total_assets: 100000000, accruals: 0, is_screened: true, is_flagged: false}
