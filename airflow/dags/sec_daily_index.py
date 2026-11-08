@@ -77,7 +77,7 @@ def sec_daily_index():
         return day.isoformat()
 
     @task(outlets=[SILVER_DAILY_INDEX])
-    def to_silver(day_iso: str) -> int:
+    def to_silver(day_iso: str, **context) -> int:
         """Parse the bronze file into typed Parquet and replace that day's silver partition."""
         import datetime as dt
         import tempfile
@@ -101,6 +101,8 @@ def sec_daily_index():
             parquet = Path(tmp) / "part-0.parquet"
             rows = write_filings(filings, parquet)
             replace_partition(s3, settings.lake_bucket, parquet, di.silver_key(day))
+        # Tell downstream DAGs which day is new in silver (snowflake_load_daily_index reads it).
+        context["outlet_events"][SILVER_DAILY_INDEX].extra = {"day": day_iso}
         return rows
 
     to_silver(land_index())

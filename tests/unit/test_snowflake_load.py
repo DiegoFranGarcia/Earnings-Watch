@@ -11,7 +11,9 @@ from moto import mock_aws
 from earningswatch.snowflake_load import (
     NUM_COLUMNS,
     LoadMismatch,
+    SnowflakeSettingsMissing,
     check_quarter,
+    connect_from_settings,
     copy_sql,
     create_table_sql,
     daily_index_copy_sql,
@@ -20,6 +22,7 @@ from earningswatch.snowflake_load import (
     load_daily_index_month,
     load_quarter,
     months_between,
+    months_to_load,
     quarters_to_load,
 )
 
@@ -197,3 +200,23 @@ def test_a_daily_index_month_commits_only_when_raw_matches_the_files() -> None:
     with pytest.raises(LoadMismatch, match="RAW holds 0 rows, the files hold 120,000"):
         load_daily_index_month(short, "2025-01")
     assert short.statements[-1] == "ROLLBACK" and "COMMIT" not in short.statements
+
+
+def test_months_come_from_a_manual_range_or_the_announced_days() -> None:
+    assert months_to_load("2025-11..2026-01", ["2026-11-06"]) == ["2025-11", "2025-12", "2026-01"]
+    assert months_to_load("", ["2026-11-06", "2026-10-30", "2026-11-05"]) == ["2026-10", "2026-11"]
+    assert months_to_load(" ", []) == []
+    with pytest.raises(ValueError):
+        months_to_load("", ["2026-13-01"])
+
+
+def test_missing_snowflake_settings_are_named() -> None:
+    from earningswatch.config import Settings
+
+    settings = Settings(
+        sec_user_agent="x", lake_bucket="lake", sec_rate_per_second=5.0,
+        fsds_base_url="u", company_tickers_url="u",
+        sf_account="ORG-ACCT", sf_user=None, sf_private_key_path=None, sf_database="DB",
+    )  # fmt: skip
+    with pytest.raises(SnowflakeSettingsMissing, match="SF_USER, SF_PRIVATE_KEY_PATH"):
+        connect_from_settings(settings, "earningswatch:test")

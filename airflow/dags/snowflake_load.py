@@ -20,22 +20,12 @@ RAW_FSDS = Asset("raw_fsds")
 
 def _connect(query_tag: str):
     from earningswatch.config import load_settings
-    from earningswatch.snowflake_load import connect
+    from earningswatch.snowflake_load import SnowflakeSettingsMissing, connect_from_settings
 
-    s = load_settings()
-    missing = [
-        name
-        for name, value in (
-            ("SF_ACCOUNT", s.sf_account),
-            ("SF_USER", s.sf_user),
-            ("SF_PRIVATE_KEY_PATH", s.sf_private_key_path),
-            ("SF_DATABASE", s.sf_database),
-        )
-        if not value
-    ]
-    if missing:
-        raise AirflowFailException(f"set {', '.join(missing)} in airflow/.env")
-    return connect(s.sf_account, s.sf_user, s.sf_private_key_path, s.sf_database, query_tag)
+    try:
+        return connect_from_settings(load_settings(), query_tag)
+    except SnowflakeSettingsMissing as exc:
+        raise AirflowFailException(str(exc)) from exc  # configuration: retrying cannot help
 
 
 @dag(

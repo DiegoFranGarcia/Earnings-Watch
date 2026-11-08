@@ -317,3 +317,40 @@ def load_daily_index_month(cursor, month: str, stage: str = "RAW.SILVER") -> int
     cursor.execute("COMMIT")
     log.info("Loaded daily index %s: %s rows", month, f"{loaded:,}")
     return loaded
+
+
+class SnowflakeSettingsMissing(RuntimeError):
+    """Snowflake is not configured for this Airflow."""
+
+
+def connect_from_settings(settings, query_tag: str):
+    """A connection from the SF_* settings, naming any that are missing."""
+    missing = [
+        name
+        for name, value in (
+            ("SF_ACCOUNT", settings.sf_account),
+            ("SF_USER", settings.sf_user),
+            ("SF_PRIVATE_KEY_PATH", settings.sf_private_key_path),
+            ("SF_DATABASE", settings.sf_database),
+        )
+        if not value
+    ]
+    if missing:
+        raise SnowflakeSettingsMissing(f"set {', '.join(missing)} in airflow/.env")
+    return connect(
+        settings.sf_account,
+        settings.sf_user,
+        settings.sf_private_key_path,
+        settings.sf_database,
+        query_tag,
+    )
+
+
+def months_to_load(manual: str, announced_days: list[str]) -> list[str]:
+    """A manual run's months ('2025-01' or '2025-01..2026-11') if given, otherwise the months
+    of the days the triggering silver_daily_index events announced. Sorted, no repeats."""
+    manual = manual.strip()
+    if manual:
+        first, _, last = manual.partition("..")
+        return months_between(first.strip(), (last or first).strip())
+    return sorted({check_month(day[:7]) for day in announced_days})
