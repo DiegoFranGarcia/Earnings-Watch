@@ -5,6 +5,10 @@ freshness runs first; then Cosmos renders every dbt model and seed as its own Ai
 that model's tests right after it, so a failing test stops only what depends on it and a single
 model can be retried. Cosmos reads the project from a pre-built manifest (target/manifest.json),
 so parsing this file stays instant: rebuild the manifest with `dbt parse` after changing dbt.
+
+The file is deliberately not named dbt_*.py: dbt imports every top-level module named dbt_* on
+the Python path (its plugin discovery), and this folder is on the path in tests and in Airflow.
+The DAG's id still comes from the function below: dbt_build.
 """
 
 from __future__ import annotations

@@ -49,3 +49,12 @@ def test_every_mart_model_enforces_a_contract(manifest) -> None:
         if model.fqn[1] == "marts" and not model.config.contract.enforced
     ]
     assert not unenforced, f"mart models without an enforced contract: {unenforced}"
+
+
+def test_no_dag_file_looks_like_a_dbt_plugin() -> None:
+    """dbt imports every top-level module named dbt_* it finds on the Python path, to discover
+    plugins. The DAG folder is on that path (in tests, and in Airflow via PYTHONPATH), so a DAG
+    file named dbt_*.py would be imported by dbt itself, even inside dbt's own virtualenv."""
+    dags = ROOT / "airflow" / "dags"
+    offenders = sorted(path.name for path in dags.iterdir() if path.name.startswith("dbt_"))
+    assert not offenders, f"rename these; dbt would import them as plugins: {offenders}"
