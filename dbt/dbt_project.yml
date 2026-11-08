@@ -34,6 +34,7 @@ seeds:
         form: varchar
         deadline_days: integer
         extension_days: integer
+        filer_group: varchar
     metric_tag_map:
       +column_types:
         metric: varchar

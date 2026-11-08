@@ -36,6 +36,7 @@ scheduled as (
         filings.filed_date,
         deadlines.deadline_days,
         deadlines.extension_days,
+        deadlines.filer_group,
         dateadd(day, deadlines.deadline_days, filings.period_end) as statutory_date
     from filings
     inner join deadlines
@@ -81,6 +82,7 @@ select
     company_key,
     form,
     filer_status,
+    filer_group,
     period_end,
     filed_date,
     deadline_days,

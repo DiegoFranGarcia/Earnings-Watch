@@ -1,6 +1,7 @@
 -- One row per filer status, form and period year: how many 10-K or 10-Q filings were on time,
 -- within a late-filing notice's extension, or late, and how long filers took. Notices are
 -- known only from 2025 (notice_data_available), so earlier years count extensions as late.
+-- For trends over time use filer_group: the SEC re-coded filer statuses in 2018 and 2020.
 with filings as (
     select
         *,
@@ -13,6 +14,8 @@ grouped as (
         filer_status,
         form,
         period_year,
+        -- One group per status, so any_value is exact.
+        any_value(filer_group) as filer_group,
         count(*) as filings,
         count_if(timeliness = 'on_time') as on_time_filings,
         count_if(timeliness = 'within_extension') as within_extension_filings,
@@ -31,6 +34,7 @@ grouped as (
 
 select
     filer_status,
+    filer_group,
     form,
     period_year,
     filings,

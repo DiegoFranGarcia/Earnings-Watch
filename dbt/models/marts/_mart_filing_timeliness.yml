@@ -6,12 +6,18 @@ models:
       Grain: one row per filer status, form (10-K or 10-Q) and period year. Counts of filings
       on time, within a late-filing notice's extension, and late, with how long filers took.
       Notices are known only from 2025 (notice_data_available), so earlier years count
-      filings that used an extension as late.
+      filings that used an extension as late. For trends over time, sum by filer_group: the
+      SEC re-coded smaller companies from 5-SML to 4-NON in 2018 and moved many accelerated
+      filers to non-accelerated in 2020; deadlines, and so on-time status, are unaffected.
     config:
       contract:
         enforced: true
     columns:
       - name: filer_status
+        data_type: varchar
+        data_tests: [not_null]
+      - name: filer_group
+        description: large_accelerated, accelerated or non_accelerated, by filing deadline.
         data_type: varchar
         data_tests: [not_null]
       - name: form
