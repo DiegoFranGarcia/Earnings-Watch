@@ -40,12 +40,12 @@ unit_tests:
         rows:
           - {accession_number: "k22", accepted_at: "2023-02-01 09:00:00"}
           - {accession_number: "k23", accepted_at: "2024-02-01 09:00:00"}
-          - {accession_number: "k24", accepted_at: "2025-02-01 09:00:00"}
-          - {accession_number: "k24a", accepted_at: "2025-06-01 09:00:00"}
+          - {accession_number: "k24", accepted_at: "2025-02-01 09:00:00", form: "10-K"}
+          - {accession_number: "k24a", accepted_at: "2025-06-01 09:00:00", form: "10-K/A"}
           - {accession_number: "r23", accepted_at: "2024-03-01 09:00:00"}
-          - {accession_number: "r24", accepted_at: "2025-03-01 09:00:00"}
+          - {accession_number: "r24", accepted_at: "2025-03-01 09:00:00", form: "10-K"}
     expect:
       rows:
-        - {cik: 1, metric: net_income, value_date: "2023-12-31", report_count: 3, first_reported_value: 100, first_reported_accession_number: "k23", latest_value: 90, latest_accession_number: "k24a", is_restated: true}
-        - {cik: 1, metric: net_income, value_date: "2022-12-31", report_count: 2, first_reported_value: 50, first_reported_accession_number: "k22", latest_value: 50.2, latest_accession_number: "k23", is_restated: false}
-        - {cik: 2, metric: revenue, value_date: "2023-12-31", report_count: 2, first_reported_value: 0, first_reported_accession_number: "r23", latest_value: 5, latest_accession_number: "r24", is_restated: true}
+        - {cik: 1, metric: net_income, value_date: "2023-12-31", report_count: 3, first_reported_value: 100, first_reported_accession_number: "k23", latest_value: 90, latest_accession_number: "k24a", is_restated: true, first_change_accession_number: "k24a", first_change_form: "10-K/A"}
+        - {cik: 1, metric: net_income, value_date: "2022-12-31", report_count: 2, first_reported_value: 50, first_reported_accession_number: "k22", latest_value: 50.2, latest_accession_number: "k23", is_restated: false, first_change_accession_number: null, first_change_form: null}
+        - {cik: 2, metric: revenue, value_date: "2023-12-31", report_count: 2, first_reported_value: 0, first_reported_accession_number: "r23", latest_value: 5, latest_accession_number: "r24", is_restated: true, first_change_accession_number: "r24", first_change_form: "10-K"}

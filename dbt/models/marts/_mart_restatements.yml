@@ -1,0 +1,95 @@
+version: 2
+
+models:
+  - name: mart_restatements
+    description: >
+      Grain: one row per materially restated fact (company, metric, period end and duration):
+      latest value differs from the first-reported one by more than var
+      restatement_threshold. restatement_kind classifies the first report that materially
+      changed it: tag_switch (a different XBRL tag, so a different measure), correction (an
+      amendment), or recast (a later original filing's comparatives).
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: cik
+        data_type: bigint
+        data_tests: [not_null]
+      - name: company_key
+        data_type: varchar
+      - name: company_name
+        data_type: varchar
+      - name: sic
+        data_type: integer
+      - name: metric
+        data_type: varchar
+        data_tests: [not_null]
+      - name: period_end
+        data_type: date
+        data_tests: [not_null]
+      - name: duration_quarters
+        data_type: integer
+      - name: report_count
+        data_type: integer
+      - name: first_reported_at
+        data_type: timestamp_ntz
+      - name: first_reported_accession_number
+        data_type: varchar
+      - name: first_reported_tag
+        data_type: varchar
+      - name: first_change_at
+        description: Always present for a restated fact; a missing value means a logic error.
+        data_type: timestamp_ntz
+        data_tests: [not_null]
+      - name: first_change_accession_number
+        data_type: varchar
+      - name: first_change_form
+        data_type: varchar
+      - name: first_change_tag
+        data_type: varchar
+      - name: first_reported_value
+        data_type: decimal(28, 4)
+      - name: first_changed_value
+        data_type: decimal(28, 4)
+      - name: latest_value
+        data_type: decimal(28, 4)
+      - name: restatement_amount
+        data_type: decimal(30, 4)
+      - name: restatement_pct
+        data_type: double
+      - name: restatement_key
+        data_type: varchar
+        data_tests: [unique, not_null]
+      - name: days_to_first_change
+        data_type: integer
+      - name: restatement_kind
+        data_type: varchar
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [tag_switch, correction, recast]
+
+unit_tests:
+  - name: restatements_are_classified_by_their_first_change
+    description: >
+      A changed tag is a tag switch even when it arrives in an amendment; otherwise an
+      amendment is a correction and a later original filing is a recast. A fact that was not
+      materially restated produces no row.
+    model: mart_restatements
+    given:
+      - input: ref('int_facts__versions')
+        rows:
+          - {cik: 1, metric: cash, value_date: "2019-12-31", duration_quarters: 0, is_restated: true, first_reported_value: 100, latest_value: 120, restatement_amount: 20, first_reported_tag: "CashAndCashEquivalentsAtCarryingValue", first_change_tag: "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents", first_change_form: "10-K/A", first_reported_at: "2020-02-01 09:00:00", first_change_at: "2021-02-01 09:00:00"}
+          - {cik: 1, metric: net_income, value_date: "2019-12-31", duration_quarters: 4, is_restated: true, first_reported_value: 100, latest_value: 80, restatement_amount: -20, first_reported_tag: "NetIncomeLoss", first_change_tag: "NetIncomeLoss", first_change_form: "10-K/A", first_reported_at: "2020-02-01 09:00:00", first_change_at: "2020-06-01 09:00:00"}
+          - {cik: 1, metric: operating_income, value_date: "2019-12-31", duration_quarters: 4, is_restated: true, first_reported_value: 100, latest_value: 90, restatement_amount: -10, first_reported_tag: "OperatingIncomeLoss", first_change_tag: "OperatingIncomeLoss", first_change_form: "10-K", first_reported_at: "2020-02-01 09:00:00", first_change_at: "2021-02-01 09:00:00"}
+          - {cik: 1, metric: revenue, value_date: "2019-12-31", duration_quarters: 4, is_restated: false, first_reported_value: 100, latest_value: 100.2, restatement_amount: 0.2, first_reported_tag: "Revenues"}
+      - input: ref('int_company__filing_versions')
+        rows: []
+      - input: ref('dim_company')
+        rows: []
+    expect:
+      rows:
+        - {metric: cash, restatement_kind: tag_switch, restatement_pct: 0.2, days_to_first_change: 366}
+        - {metric: net_income, restatement_kind: correction, restatement_pct: -0.2, days_to_first_change: 121}
+        - {metric: operating_income, restatement_kind: recast, restatement_pct: -0.1, days_to_first_change: 366}
