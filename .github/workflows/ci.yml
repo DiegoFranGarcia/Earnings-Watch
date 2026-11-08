@@ -5,7 +5,6 @@ on:
     branches: [main]
   pull_request:
 
-# Least privilege: this workflow only needs to read the code.
 permissions:
   contents: read
 
@@ -39,3 +38,17 @@ jobs:
         env:
           REQUIRE_SPARK_TESTS: "1"  # fail, never skip, if Java is missing
         run: uv run pytest -v
+
+  dag-tests:
+    # The DAG tests need Airflow, its providers and Cosmos: they run inside the real image,
+    # which this job also builds, so a broken requirements.txt fails here, not on a laptop.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Build the Airflow image
+        run: docker build -t earnings-watch-airflow:ci airflow
+
+      - name: DAG integrity tests, inside the image
+        run: scripts/test_dags.sh earnings-watch-airflow:ci
