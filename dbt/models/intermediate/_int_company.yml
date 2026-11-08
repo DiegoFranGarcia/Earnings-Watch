@@ -1,11 +1,24 @@
 version: 2
 
 models:
+  - name: int_company__filing_versions
+    description: >
+      Grain: one row per filing (accession number), with the company version it belongs to:
+      the run of consecutive filings whose name, SIC code, state of incorporation, fiscal year
+      end and filer status are all identical, as recorded on each filing (gaps and islands).
+      company_key matches dim_company's.
+    columns:
+      - name: accession_number
+        data_tests: [unique, not_null]
+      - name: version_number
+        data_tests: [not_null]
+      - name: company_key
+        data_tests: [not_null]
+
   - name: int_company__attribute_changes
     description: >
-      Grain: one row per company version (cik, version_number). A version is a run of
-      consecutive filings whose name, SIC code, state of incorporation, fiscal year end and
-      filer status are all identical, as recorded on each filing (gaps and islands).
+      Grain: one row per company version (cik, version_number): the filings of
+      int_company__filing_versions grouped by version, with the first filing's time.
     columns:
       - name: cik
         data_tests: [not_null]
@@ -17,10 +30,10 @@ models:
 unit_tests:
   - name: a_name_that_changes_back_is_a_new_version
     description: >
-      A -> A -> B -> A is three versions, not two: the repeated A collapses, and the return
-      to A starts a new version instead of merging with the first. Also: a missing value
-      that becomes known is a change, and a first filing with nothing known still counts.
-    model: int_company__attribute_changes
+      A -> A -> B -> A is three versions, not two: the repeated A stays in version 1, and the
+      return to A starts version 3 instead of rejoining version 1. Also: a missing value that
+      becomes known is a change, and a first filing with nothing known still starts version 1.
+    model: int_company__filing_versions
     given:
       - input: ref('stg_sec__submissions')
         rows:
@@ -33,9 +46,10 @@ unit_tests:
           - {cik: 3, accession_number: "c1", accepted_at: "2015-01-01 09:00:00"}
     expect:
       rows:
-        - {cik: 1, version_number: 1, company_name: "ACME INC", first_accession_number: "a1", filing_count: 2}
-        - {cik: 1, version_number: 2, company_name: "ACME CORP", first_accession_number: "a3", filing_count: 1}
-        - {cik: 1, version_number: 3, company_name: "ACME INC", first_accession_number: "a4", filing_count: 1}
-        - {cik: 2, version_number: 1, company_name: "BETA", first_accession_number: "b1", filing_count: 1}
-        - {cik: 2, version_number: 2, company_name: "BETA", first_accession_number: "b2", filing_count: 1}
-        - {cik: 3, version_number: 1, company_name: null, first_accession_number: "c1", filing_count: 1}
+        - {accession_number: "a1", version_number: 1}
+        - {accession_number: "a2", version_number: 1}
+        - {accession_number: "a3", version_number: 2}
+        - {accession_number: "a4", version_number: 3}
+        - {accession_number: "b1", version_number: 1}
+        - {accession_number: "b2", version_number: 2}
+        - {accession_number: "c1", version_number: 1}

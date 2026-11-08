@@ -1,0 +1,116 @@
+version: 2
+
+models:
+  - name: dim_filing
+    description: >
+      Grain: one row per XBRL filing (accession number) in the Financial Statement Data Sets,
+      with the company version the filing belongs to, its form, filer status, dates, and how
+      many days after the period end it was filed.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: accession_number
+        data_type: varchar
+        data_tests: [unique, not_null]
+      - name: cik
+        data_type: bigint
+        data_tests: [not_null]
+      - name: company_key
+        data_type: varchar
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_company')
+                field: company_key
+      - name: form
+        data_type: varchar
+      - name: filer_status
+        data_type: varchar
+      - name: fiscal_year
+        data_type: integer
+      - name: fiscal_period
+        data_type: varchar
+      - name: period_end
+        data_type: date
+      - name: filed_date
+        data_type: date
+      - name: accepted_at
+        data_type: timestamp_ntz
+      - name: was_later_amended
+        data_type: boolean
+      - name: co_registrant_count
+        data_type: integer
+      - name: source_quarter
+        data_type: varchar
+      - name: is_amendment
+        data_type: boolean
+      - name: days_after_period_end
+        data_type: integer
+
+  - name: dim_date
+    description: "Grain: one row per calendar day, 2000-01-01 to 2035-12-31. Calendar labels only."
+    columns:
+      - name: date_day
+        data_tests: [unique, not_null]
+
+  - name: fct_reported_facts
+    description: >
+      Grain: one row per number reported in a filing, exactly as filed (every version of every
+      fact). Joined to the company version its filing belongs to; labelled with a canonical
+      metric where its tag maps to one. Incremental: a reloaded source quarter is replaced.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: accession_number
+        data_type: varchar
+        data_tests: [not_null]
+      - name: cik
+        data_type: bigint
+      - name: company_key
+        description: Null only for numbers whose filing the SEC never listed (2013q1).
+        data_type: varchar
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_company')
+                field: company_key
+              config:
+                where: "company_key is not null"
+      - name: metric
+        data_type: varchar
+      - name: tag
+        data_type: varchar
+      - name: taxonomy_version
+        data_type: varchar
+      - name: value_date
+        data_type: date
+      - name: duration_quarters
+        data_type: integer
+      - name: unit
+        data_type: varchar
+      - name: segments
+        data_type: varchar
+      - name: co_registrant
+        data_type: varchar
+      - name: reported_value
+        data_type: decimal(28, 4)
+      - name: footnote
+        data_type: varchar
+      - name: is_entity_total
+        data_type: boolean
+      - name: period_type
+        data_type: varchar
+      - name: has_key_conflict
+        data_type: boolean
+      - name: source_quarter
+        data_type: varchar
+        data_tests: [not_null]
+      - name: loaded_at
+        data_type: timestamp_ntz
+        data_tests: [not_null]
+      - name: reported_fact_key
+        data_type: varchar
+        data_tests: [unique, not_null]
