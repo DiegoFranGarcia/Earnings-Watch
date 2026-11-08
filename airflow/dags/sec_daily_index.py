@@ -12,12 +12,16 @@ from datetime import timedelta
 
 import pendulum
 from airflow.sdk import Asset, dag, task
+from airflow.sdk.definitions.deadline import AsyncCallback, DeadlineAlert, DeadlineReference
 from airflow.sdk.exceptions import AirflowSkipException
+
+from earningswatch.callbacks import notify_failure
 
 SILVER_DAILY_INDEX = Asset("silver_daily_index")
 
 DEFAULT_ARGS = {
     "owner": "earningswatch",
+    "on_failure_callback": notify_failure,
     "retries": 3,
     "retry_delay": timedelta(minutes=2),
     "retry_exponential_backoff": True,
@@ -33,6 +37,16 @@ DEFAULT_ARGS = {
     catchup=False,  # history is loaded deliberately with `airflow backfill create`
     max_active_runs=2,
     default_args=DEFAULT_ARGS,
+    # Finished by 12:00 UTC (06:00 + 6 h), or an alert: catches a run that is stuck or never
+    # started, which no failure callback would report.
+    deadline=DeadlineAlert(
+        reference=DeadlineReference.DAGRUN_LOGICAL_DATE,
+        interval=timedelta(hours=6),
+        callback=AsyncCallback(
+            "earningswatch.callbacks.notify_deadline_missed",
+            kwargs={"dag_id": "sec_daily_index", "deadline": "12:00 UTC"},
+        ),
+    ),
     tags=["earningswatch", "ingestion"],
     doc_md=__doc__,
 )

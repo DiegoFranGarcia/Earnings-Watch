@@ -14,6 +14,8 @@ import pendulum
 from airflow.sdk import Asset, Param, dag, get_current_context, task
 from airflow.sdk.exceptions import AirflowFailException
 
+from earningswatch.callbacks import notify_failure
+
 SILVER_DAILY_INDEX = Asset("silver_daily_index")
 RAW_DAILY_INDEX = Asset("raw_daily_index")
 
@@ -34,6 +36,8 @@ def _connect(query_tag: str):
     catchup=False,
     max_active_runs=1,
     default_args={
+        "owner": "earningswatch",
+        "on_failure_callback": notify_failure,
         "retries": 2,  # for connection hiccups; count mismatches fail immediately
         "retry_delay": timedelta(minutes=2),
         "retry_exponential_backoff": True,
@@ -56,7 +60,10 @@ def snowflake_load_daily_index():
 
         events = context["triggering_asset_events"].get(SILVER_DAILY_INDEX, [])
         announced = [e.extra["day"] for e in events if e.extra.get("day")]
-        months = months_to_load(context["params"]["months"], announced)
+        try:
+            months = months_to_load(context["params"]["months"], announced)
+        except ValueError as exc:
+            raise AirflowFailException(f"bad months parameter: {exc}") from exc  # a typo
         print(f"Months to load: {months or 'none'}")
         return months
 

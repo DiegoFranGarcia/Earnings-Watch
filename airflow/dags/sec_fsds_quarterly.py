@@ -15,6 +15,7 @@ import pendulum
 from airflow.providers.amazon.aws.operators.emr import EmrServerlessStartJobOperator
 from airflow.sdk import Asset, dag, task
 
+from earningswatch.callbacks import notify_failure
 from earningswatch.sensors import SecFileSensor
 
 BRONZE_FSDS = Asset("bronze_fsds")
@@ -22,6 +23,7 @@ SILVER_FSDS = Asset("silver_fsds")
 
 DEFAULT_ARGS = {
     "owner": "earningswatch",
+    "on_failure_callback": notify_failure,
     "retries": 3,
     "retry_delay": timedelta(minutes=2),
     "retry_exponential_backoff": True,

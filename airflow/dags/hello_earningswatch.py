@@ -12,11 +12,14 @@ from datetime import timedelta
 import pendulum
 from airflow.sdk import dag, task
 
+from earningswatch.callbacks import notify_failure
+
 DBT_BIN = "/opt/dbt_venv/bin/dbt"
 
 # House rules every EarningsWatch DAG follows.
 DEFAULT_ARGS = {
     "owner": "earningswatch",
+    "on_failure_callback": notify_failure,
     "retries": 1,
     "retry_delay": timedelta(minutes=1),
     "execution_timeout": timedelta(minutes=5),

@@ -14,6 +14,8 @@ import pendulum
 from airflow.sdk import Asset, Param, dag, get_current_context, task
 from airflow.sdk.exceptions import AirflowFailException
 
+from earningswatch.callbacks import notify_failure
+
 SILVER_FSDS = Asset("silver_fsds")
 RAW_FSDS = Asset("raw_fsds")
 
@@ -34,6 +36,8 @@ def _connect(query_tag: str):
     catchup=False,
     max_active_runs=1,
     default_args={
+        "owner": "earningswatch",
+        "on_failure_callback": notify_failure,
         "retries": 2,  # for connection hiccups; count mismatches fail immediately
         "retry_delay": timedelta(minutes=2),
         "retry_exponential_backoff": True,
@@ -56,7 +60,10 @@ def snowflake_load():
 
         events = context["triggering_asset_events"].get(SILVER_FSDS, [])
         announced = [e.extra["quarter"] for e in events if e.extra.get("quarter")]
-        quarters = quarters_to_load(context["params"]["quarters"], announced)
+        try:
+            quarters = quarters_to_load(context["params"]["quarters"], announced)
+        except ValueError as exc:
+            raise AirflowFailException(f"bad quarters parameter: {exc}") from exc  # a typo
         print(f"Quarters to load: {quarters or 'none'}")
         return quarters
 

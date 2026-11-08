@@ -13,10 +13,13 @@ import pendulum
 from airflow.sdk import Asset, dag, task
 from airflow.sdk.exceptions import AirflowSkipException
 
+from earningswatch.callbacks import notify_failure
+
 SILVER_COMPANY_TICKERS = Asset("silver_company_tickers")
 
 DEFAULT_ARGS = {
     "owner": "earningswatch",
+    "on_failure_callback": notify_failure,
     "retries": 3,
     "retry_delay": timedelta(minutes=2),
     "retry_exponential_backoff": True,

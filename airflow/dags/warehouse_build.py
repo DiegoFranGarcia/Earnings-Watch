@@ -22,6 +22,8 @@ from airflow.sdk import Asset, dag, task
 from cosmos import DbtTaskGroup, ExecutionConfig, ProfileConfig, ProjectConfig, RenderConfig
 from cosmos.constants import LoadMode, TestBehavior
 
+from earningswatch.callbacks import notify_failure
+
 RAW_FSDS = Asset("raw_fsds")
 RAW_DAILY_INDEX = Asset("raw_daily_index")
 MARTS = Asset("marts")
@@ -36,6 +38,8 @@ DBT_EXECUTABLE = os.environ.get("DBT_EXECUTABLE", "/opt/dbt_venv/bin/dbt")
     catchup=False,
     max_active_runs=1,
     default_args={
+        "owner": "earningswatch",
+        "on_failure_callback": notify_failure,
         "retries": 1,
         "retry_delay": timedelta(minutes=2),
         "execution_timeout": timedelta(minutes=30),
