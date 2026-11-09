@@ -14,6 +14,34 @@ from lib.schemas import NUM_COLUMNS, NUM_ENRICHMENT, NUM_KEY
 CORRUPT = "_corrupt_record"
 
 
+class HeaderMismatch(ValueError):
+    """A source file's columns differ from the schema the job expects."""
+
+
+def check_header(spark: SparkSession, path: str, columns: tuple[str, ...]) -> None:
+    """Fail unless the file's header row is exactly `columns`, in order.
+
+    Spark maps an explicit schema onto a CSV file by position and never compares the header's
+    names. Without this check, a renamed or reordered column would load into the wrong field
+    silently, and an added one would quarantine every row under a misleading message.
+    """
+    first = spark.read.text(path).first()  # reads only the start of the file
+    found = tuple(first.value.rstrip("\r").split("\t")) if first else ()
+    if found == tuple(columns):
+        return
+    added = [c for c in found if c not in columns]
+    missing = [c for c in columns if c not in found]
+    change = (
+        "; ".join(
+            part
+            for part in (f"added {added}" if added else "", f"missing {missing}" if missing else "")
+            if part
+        )
+        or "same columns in a different order"
+    )
+    raise HeaderMismatch(f"{path}: columns changed ({change}); expected {list(columns)}")
+
+
 def read_raw(spark: SparkSession, path: str, columns: tuple[str, ...]) -> DataFrame:
     """Read a tab-separated FSDS file with every column as text.
 

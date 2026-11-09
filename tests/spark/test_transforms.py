@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 from decimal import Decimal
 
+import pytest
 from fsds_fixtures import ADSH, awkward_quarter, num_row, sub_row, write_quarter
 
 from lib.schemas import NUM_CASTS, NUM_COLUMNS, SUB_CASTS, SUB_COLUMNS
@@ -110,3 +112,25 @@ def test_awkward_quarter_reads_cleanly(spark, tmp_path) -> None:
 
     assert good_rows(raw_num).count() == 11
     assert quarantined_rows(raw_num).count() == 1
+
+
+@pytest.mark.parametrize(
+    ("header", "change"),
+    [
+        ("a\tb\tc", None),  # exactly as expected
+        ("a\tnew\tb\tc", "added ['new']"),  # a column inserted mid-file
+        ("a\tc\tb", "same columns in a different order"),  # silently wrong without the check
+        ("a\tb", "missing ['c']"),
+    ],
+)
+def test_the_header_must_match_the_expected_columns(spark, tmp_path, header, change) -> None:
+    from lib.transforms import HeaderMismatch, check_header
+
+    path = tmp_path / "num.txt"
+    path.write_text(header + "\n1\t2\t3\n")
+
+    if change is None:
+        check_header(spark, str(path), ("a", "b", "c"))
+    else:
+        with pytest.raises(HeaderMismatch, match=re.escape(change)):
+            check_header(spark, str(path), ("a", "b", "c"))

@@ -40,6 +40,7 @@ from pyspark.sql import functions as F  # noqa: E402
 from lib.quarters import expand  # noqa: E402
 from lib.schemas import NUM_CASTS, NUM_COLUMNS, NUM_KEY, SUB_CASTS, SUB_COLUMNS  # noqa: E402
 from lib.transforms import (  # noqa: E402
+    check_header,
     count_cast_failures,
     good_rows,
     quarantined_rows,
@@ -147,6 +148,10 @@ def run(
     else:
         raise ValueError("give bronze_root or bronze_folder")
     silver = silver_root.rstrip("/")
+    # The SEC has changed these files before (December 2024 added `segments`): fail clearly,
+    # naming the change, rather than load columns into the wrong fields.
+    check_header(spark, f"{folder}/sub.txt", SUB_COLUMNS)
+    check_header(spark, f"{folder}/num.txt", NUM_COLUMNS)
     raw = {
         "sub": read_raw(spark, f"{folder}/sub.txt", SUB_COLUMNS),
         "num": read_raw(spark, f"{folder}/num.txt", NUM_COLUMNS),
