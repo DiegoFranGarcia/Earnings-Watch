@@ -1,0 +1,41 @@
+version: 2
+
+models:
+  - name: mart_pipeline_health
+    description: >
+      Grain: one row per calendar day, for the last 30 days. Is the data correct (dbt test
+      results; warnings are findings, so only failures lower test_pass_rate), complete (volume
+      checks and their failures), fresh (the newest daily-index day the volume gate saw that day,
+      and how many days behind it was), and what did it cost (mart_pipeline_costs, which lags by
+      up to six hours). Days with no runs show zeros and null rates.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: date_day
+        data_type: date
+        data_tests: [unique, not_null]
+      - name: latest_index_day
+        data_type: date
+      - name: dbt_invocations
+        data_type: integer
+      - name: tests_run
+        data_type: integer
+      - name: tests_passed
+        data_type: integer
+      - name: tests_warned
+        data_type: integer
+      - name: tests_failed
+        data_type: integer
+      - name: models_failed
+        data_type: integer
+      - name: test_pass_rate
+        data_type: double
+      - name: volume_checks
+        data_type: integer
+      - name: volume_failures
+        data_type: integer
+      - name: dollars
+        data_type: decimal(18, 6)
+      - name: index_lag_days
+        data_type: integer

@@ -125,6 +125,12 @@ Every check that fired was investigated against the data before anything was cha
 - **The SEC re-coded filer statuses in 2018 and 2020.** Trends follow deadline groups instead
   ([ADR 9](docs/adr/0009-group-filer-statuses-by-deadline.md)). Problems in filer data warn;
   problems in our logic fail ([ADR 8](docs/adr/0008-filer-data-problems-warn-our-logic-fails.md)).
+- **A circuit breaker guards the marts.** A volume gate stops `dbt_build` when the newest data is
+  implausible; drilled by deleting 60% of a quarter: the marts stayed byte-identical
+  ([ADR 10](docs/adr/0010-a-circuit-breaker-before-the-marts-publish.md), [chaos drills](docs/chaos.md)).
+- **Every dbt result, finding and cost is kept in `AUDIT`.** One model, `mart_pipeline_health`,
+  answers whether the data is correct, complete and fresh, and what it cost, for the last 30 days.
+  A full dbt build costs about $0.12–0.18; warehouse idle time nearly doubles small runs' bills.
 - **Conflicting values for the same reported number** have grown since 2024 Q3 (up to 98 rows
   a quarter); they are kept and flagged for the models to resolve, never silently dropped.
 
@@ -138,7 +144,8 @@ Every check that fired was investigated against the data before anything was cha
 | 3. Snowflake warehouse: keyless S3 access, verified loads | ✅ |
 | 4. dbt star schema: company history, restatements, timeliness | ✅ |
 | 5. Orchestration end to end: asset-triggered DAGs, Cosmos, alerts | ✅ |
-| 6–9. Observability, deployment, CI/CD, demo | |
+| 6. Data quality and observability: AUDIT, circuit breaker, cost per run, chaos drills | ✅ |
+| 7–9. Deployment, CI/CD, demo | |
 
 A thin end-to-end slice (one quarter, DuckDB, dbt, Streamlit) was built first, so modelling
 problems surfaced in week three rather than week fifteen.

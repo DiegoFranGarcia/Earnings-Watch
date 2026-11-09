@@ -21,3 +21,11 @@ sources:
       - name: emr_job_runs
         identifier: EMR_JOB_RUNS
         description: What EMR billed for each Spark job, recorded by sec_fsds_quarterly.
+      - name: dq_results
+        identifier: DQ_RESULTS
+        description: Every volume check's result, recorded by dbt_build's volume gate.
+      - name: dbt_results
+        identifier: DBT_RESULTS
+        description: >
+          Every model, seed and test result of every dbt invocation, recorded by the on-run-end
+          hook in macros/audit.sql (owned by TRANSFORMER).

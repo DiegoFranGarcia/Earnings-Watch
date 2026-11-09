@@ -29,6 +29,15 @@ aws login --profile earnings-watch     # the containers share this session; it e
 retry. Run `aws login` again, then clear the failed tasks. On EC2 (Stage 7) an instance role
 removes this problem.
 
+## A fresh environment
+
+Airflow writes two tables in `AUDIT` as `LOADER`; create them before the first run, so they exist
+(and are readable by dbt) from the start. Idempotent:
+
+~~~bash
+uv run python scripts/create_audit_tables.py
+~~~
+
 ## Rerun a failed task
 
 Clear it in the UI (the task, then **Clear**), or:
