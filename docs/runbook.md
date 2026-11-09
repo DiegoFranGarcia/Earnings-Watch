@@ -56,6 +56,21 @@ if the count matches (Spark's reconciliation record for FSDS, the files themselv
 index). A mismatch fails immediately, with no retry, and rolls back: RAW is unchanged. Investigate
 the source before rerunning. `dbt_build` follows automatically.
 
+## A volume check failed
+
+`dbt_build` starts with a volume gate. If the newest day of filings is under half its usual
+volume, or the newest quarter under half (or over double) the same quarter a year earlier, the
+build stops and **the marts keep their last good data**. Every result is in `AUDIT.DQ_RESULTS`.
+
+1. Read the alert: it names the check, the day or quarter, and the ratio.
+2. Investigate the source: is the SEC's file complete? Did the load load all of it?
+3. If the data is wrong, fix the source and reload. If it is genuinely unusual (Christmas Eve
+   really is quiet), trigger `dbt_build` by hand with `{"accept_volume": true}`.
+
+~~~bash
+docker compose exec airflow-scheduler airflow dags trigger dbt_build -c '{"accept_volume": true}'
+~~~
+
 ## Reprocess an FSDS quarter from the SEC
 
 Rerun `sec_fsds_quarterly` for the quarter's logical date. If the SEC republished the file, the

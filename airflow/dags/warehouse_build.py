@@ -1,10 +1,14 @@
 """Build the dbt project in Snowflake whenever RAW changes.
 
-Triggered by either RAW asset (a loaded FSDS quarter or a loaded day of the daily index). Source
-freshness runs first; then Cosmos renders every dbt model and seed as its own Airflow task, with
-that model's tests right after it, so a failing test stops only what depends on it and a single
-model can be retried. Cosmos reads the project from a pre-built manifest (target/manifest.json),
-so parsing this file stays instant: rebuild the manifest with `dbt parse` after changing dbt.
+Triggered by either RAW asset (a loaded FSDS quarter or a loaded day of the daily index).
+
+1. A volume gate, as a circuit breaker: if the newest data is implausibly small (or, for a
+   quarter, large), the build stops and the marts keep their last good data.
+2. Source freshness: warns on stale RAW data.
+3. Cosmos renders every dbt model and seed as its own Airflow task, with that model's tests
+   right after it, so a failing test stops only what depends on it and a single model can be
+   retried. Cosmos reads a pre-built manifest (target/manifest.json), so parsing this file stays
+   instant: rebuild the manifest with `dbt parse` after changing dbt.
 
 The file is deliberately not named dbt_*.py: dbt imports every top-level module named dbt_* on
 the Python path (its plugin discovery), and this folder is on the path in tests and in Airflow.
@@ -18,7 +22,8 @@ from datetime import timedelta
 from pathlib import Path
 
 import pendulum
-from airflow.sdk import Asset, dag, task
+from airflow.sdk import Asset, Param, dag, task
+from airflow.sdk.exceptions import AirflowFailException
 from cosmos import DbtTaskGroup, ExecutionConfig, ProfileConfig, ProjectConfig, RenderConfig
 from cosmos.constants import LoadMode, TestBehavior
 
@@ -44,9 +49,41 @@ DBT_EXECUTABLE = os.environ.get("DBT_EXECUTABLE", "/opt/dbt_venv/bin/dbt")
         "retry_delay": timedelta(minutes=2),
         "execution_timeout": timedelta(minutes=30),
     },
+    params={
+        "accept_volume": Param(
+            False,
+            type="boolean",
+            description="Build even if a volume check fails: only after investigating it "
+            "(Christmas Eve really is quiet).",
+        )
+    },
     tags=["dbt", "transform"],
 )
 def dbt_build():
+    @task(execution_timeout=timedelta(minutes=10))
+    def volume_gate(**context) -> None:
+        """Circuit breaker: a failed volume check stops the build before it touches the marts."""
+        from earningswatch.config import load_settings
+        from earningswatch.snowflake_load import SnowflakeSettingsMissing, connect_from_settings
+        from earningswatch.volume import describe, failures, run_volume_checks
+
+        try:
+            con = connect_from_settings(load_settings(), f"earningswatch:dq:{context['run_id']}")
+        except SnowflakeSettingsMissing as exc:
+            raise AirflowFailException(str(exc)) from exc
+        try:
+            results = run_volume_checks(con.cursor(), context["run_id"])
+        finally:
+            con.close()
+        for result in results:
+            print(f"{result.outcome:>4}  {describe(result)}")
+        failed = failures(results)
+        if failed and not context["params"]["accept_volume"]:
+            raise AirflowFailException(  # deterministic: retrying cannot change the data
+                "volume check failed; the marts keep their last good data: "
+                + "; ".join(describe(r) for r in failed)
+            )
+
     @task.bash(env={"DBT_RUN_LABEL": "{{ run_id }}"}, append_env=True)
     def source_freshness() -> str:
         """Warn on stale RAW data; fail only past a source's error_after threshold."""
@@ -88,7 +125,7 @@ def dbt_build():
     def publish() -> None:
         """Announce that the marts were rebuilt and every test passed."""
 
-    source_freshness() >> build >> publish()
+    volume_gate() >> source_freshness() >> build >> publish()
 
 
 dbt_build()
