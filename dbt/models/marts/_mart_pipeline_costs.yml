@@ -1,0 +1,71 @@
+version: 2
+
+models:
+  - name: mart_pipeline_costs
+    description: >
+      Grain: one row per platform (snowflake, emr), pipeline step and Airflow run. What each
+      step of each run cost, in dollars at the prices in dbt_project.yml vars. Snowflake costs
+      come from query tags (earningswatch:<step>:<run id>); EMR costs from what EMR billed for
+      each Spark job. Snowflake's attribution excludes warehouse idle time and lags by up to six
+      hours: recent runs appear late, and totals slightly understate the bill.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: platform
+        data_type: varchar
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [snowflake, emr]
+      - name: pipeline_step
+        data_type: varchar
+        data_tests: [not_null]
+      - name: run_id
+        data_type: varchar
+        data_tests: [not_null]
+      - name: usage_unit
+        data_type: varchar
+      - name: query_count
+        data_type: integer
+      - name: started_at
+        data_type: timestamp_ntz
+      - name: ended_at
+        data_type: timestamp_ntz
+      - name: usage_amount
+        data_type: double
+      - name: dollars
+        data_type: decimal(18, 6)
+      - name: cost_key
+        data_type: varchar
+        data_tests: [unique, not_null]
+
+unit_tests:
+  - name: costs_are_grouped_by_step_and_run_and_priced
+    description: >
+      Two load queries of one run (whose ID contains colons) add up to $0.04 at $2 a credit; a
+      dbt query is priced on its own; a query without the project's tag is left out; an EMR job
+      of 0.5 vCPU-hours and 2 GB-hours costs 0.5 x 0.052624 + 2 x 0.0057785 = $0.037869.
+    model: mart_pipeline_costs
+    overrides:
+      vars:
+        snowflake_dollars_per_credit: 2.00
+        emr_dollars_per_vcpu_hour: 0.052624
+        emr_dollars_per_gb_hour: 0.0057785
+        emr_dollars_per_storage_gb_hour: 0.000111
+    given:
+      - input: source('snowflake_usage', 'query_attribution_history')
+        rows:
+          - {query_tag: "earningswatch:load:manual__2026-11-08T23:31:17.966641+00:00", credits_attributed_compute: 0.01, start_time: "2026-11-08 23:31:20", end_time: "2026-11-08 23:31:25"}
+          - {query_tag: "earningswatch:load:manual__2026-11-08T23:31:17.966641+00:00", credits_attributed_compute: 0.01, start_time: "2026-11-08 23:31:30", end_time: "2026-11-08 23:31:40"}
+          - {query_tag: "earningswatch:dbt:scheduled__2026-11-09", credits_attributed_compute: 0.05, start_time: "2026-11-09 06:10:00", end_time: "2026-11-09 06:12:00"}
+          - {query_tag: "someone_else", credits_attributed_compute: 9.99, start_time: "2026-11-09 06:10:00", end_time: "2026-11-09 06:12:00"}
+      - input: source('audit', 'emr_job_runs')
+        rows:
+          - {run_id: "manual__q", vcpu_hours: 0.5, memory_gb_hours: 2.0, storage_gb_hours: 0.0, recorded_at: "2026-11-08 23:28:00"}
+    expect:
+      rows:
+        - {platform: snowflake, pipeline_step: load, run_id: "manual__2026-11-08T23:31:17.966641+00:00", query_count: 2, dollars: 0.040000}
+        - {platform: snowflake, pipeline_step: dbt, run_id: "scheduled__2026-11-09", query_count: 1, dollars: 0.100000}
+        - {platform: emr, pipeline_step: spark, run_id: "manual__q", query_count: 1, dollars: 0.037869}

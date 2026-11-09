@@ -157,7 +157,32 @@ def sec_fsds_quarterly():
         """Tell downstream DAGs which quarter is new in silver (snowflake_load reads it)."""
         context["outlet_events"][SILVER_FSDS].extra = {"quarter": landing["quarter"]}
 
+    @task(execution_timeout=timedelta(minutes=10))
+    def record_spark_cost(job_run_id: str, landing: dict, **context) -> dict:
+        """Record what EMR billed for the job. Runs beside announce_silver, not before it, so
+        cost recording can never delay the data."""
+        import boto3
+
+        from earningswatch.config import load_settings
+        from earningswatch.costs import record_emr_job
+        from earningswatch.snowflake_load import connect_from_settings
+
+        settings = load_settings()
+        job_run = boto3.client("emr-serverless", region_name="us-east-1").get_job_run(
+            applicationId=settings.emr_application_id, jobRunId=job_run_id
+        )["jobRun"]
+        con = connect_from_settings(settings, f"earningswatch:cost:{context['run_id']}")
+        try:
+            usage = record_emr_job(
+                con.cursor(), job_run, context["dag"].dag_id, context["run_id"], landing["quarter"]
+            )
+        finally:
+            con.close()
+        print(f"EMR billed {usage} for job {job_run_id}")
+        return usage
+
     to_silver >> announce_silver(landed)
+    record_spark_cost(to_silver.output, landed)
 
 
 sec_fsds_quarterly()

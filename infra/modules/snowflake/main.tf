@@ -38,9 +38,10 @@ locals {
 
   # Read access to tables and views someone else owns, now and in future.
   read_grants = {
-    "TRANSFORMER.RAW.TABLES" = { role = "TRANSFORMER", schema = "RAW", plural = "TABLES" }
-    "REPORTER.MARTS.TABLES"  = { role = "REPORTER", schema = "MARTS", plural = "TABLES" }
-    "REPORTER.MARTS.VIEWS"   = { role = "REPORTER", schema = "MARTS", plural = "VIEWS" }
+    "TRANSFORMER.RAW.TABLES"   = { role = "TRANSFORMER", schema = "RAW", plural = "TABLES" }
+    "TRANSFORMER.AUDIT.TABLES" = { role = "TRANSFORMER", schema = "AUDIT", plural = "TABLES" }
+    "REPORTER.MARTS.TABLES"    = { role = "REPORTER", schema = "MARTS", plural = "TABLES" }
+    "REPORTER.MARTS.VIEWS"     = { role = "REPORTER", schema = "MARTS", plural = "VIEWS" }
   }
 
   # Expand the per-role maps across every granted database.

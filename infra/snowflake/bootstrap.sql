@@ -40,3 +40,7 @@ GRANT ROLE TERRAFORM_ADMIN TO USER TERRAFORM;
 SHOW RESOURCE MONITORS;
 SHOW GRANTS TO ROLE TERRAFORM_ADMIN;
 DESC USER TERRAFORM;
+
+-- Stage 6: let TRANSFORMER read Snowflake's usage views (per-query credits for
+-- mart_pipeline_costs). USAGE_VIEWER is read-only and covers usage history only.
+GRANT DATABASE ROLE SNOWFLAKE.USAGE_VIEWER TO ROLE TRANSFORMER;

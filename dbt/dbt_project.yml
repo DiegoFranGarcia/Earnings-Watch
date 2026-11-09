@@ -60,6 +60,11 @@ vars:
   # Only companies with at least this much average total assets (USD) are screened: below it,
   # near-zero assets make accrual ratios explode (shell companies at hundreds of times assets).
   minimum_average_assets: 10000000
+  # Prices for mart_pipeline_costs (check your contract and region before relying on them).
+  snowflake_dollars_per_credit: 2.00  # Standard edition, on demand
+  emr_dollars_per_vcpu_hour: 0.052624  # EMR Serverless, us-east-1
+  emr_dollars_per_gb_hour: 0.0057785
+  emr_dollars_per_storage_gb_hour: 0.000111
 
 flags:
   send_anonymous_usage_stats: false

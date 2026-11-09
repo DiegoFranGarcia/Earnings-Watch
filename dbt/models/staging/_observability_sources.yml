@@ -1,0 +1,23 @@
+version: 2
+
+sources:
+  - name: snowflake_usage
+    description: >
+      Snowflake's own usage views, read through the USAGE_VIEWER database role (granted to
+      TRANSFORMER in infra/snowflake/bootstrap.sql). Latency can be up to six hours.
+    database: SNOWFLAKE
+    schema: ACCOUNT_USAGE
+    tables:
+      - name: query_attribution_history
+        identifier: QUERY_ATTRIBUTION_HISTORY
+        description: >
+          Credits attributed to each query, with its query tag. Excludes warehouse idle time
+          (the 60 seconds before auto-suspend), so attributed cost understates the bill.
+
+  - name: audit
+    description: Tables Airflow writes in AUDIT, as LOADER (scripts/create_audit_tables.py).
+    schema: AUDIT
+    tables:
+      - name: emr_job_runs
+        identifier: EMR_JOB_RUNS
+        description: What EMR billed for each Spark job, recorded by sec_fsds_quarterly.
