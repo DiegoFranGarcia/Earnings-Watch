@@ -24,6 +24,7 @@ models:
                 # numbers from 4 filings it never lists. They cannot reach the mart (filings
                 # are inner-joined), so this warns and stays visible instead of failing.
                 severity: warn
+                store_failures: true
       - name: duration_quarters
         description: >
           Quarters the number covers: 0 is a point in time, 1 a quarter, 4 a year. Longer spans

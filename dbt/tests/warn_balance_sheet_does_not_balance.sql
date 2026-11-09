@@ -1,7 +1,7 @@
 -- A finding about filer data, so it warns instead of failing. Total assets must equal total
 -- liabilities and stockholders' equity; any quarter-end where they differ by more than
 -- var restatement_threshold is a tagging error in the filing (latest values).
-{{ config(severity = 'warn') }}
+{{ config(severity = 'warn', store_failures = true) }}
 
 with balances as (
     select

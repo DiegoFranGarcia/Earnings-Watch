@@ -3,7 +3,7 @@
 -- filer's typo. Full history: 27 of 440,233 filings, mostly a wrong year (a Q1 10-Q filed in
 -- May with a period ending that December). They match no facts on period_end, so they never
 -- reach the mart.
-{{ config(severity = 'warn') }}
+{{ config(severity = 'warn', store_failures = true) }}
 
 select
     accession_number,

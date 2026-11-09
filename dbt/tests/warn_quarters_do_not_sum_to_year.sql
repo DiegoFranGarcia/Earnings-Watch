@@ -2,7 +2,7 @@
 -- year-to-date figures sum to the annual figure by construction (Q1 + (H1 - Q1) + ...); a
 -- gap beyond rounding means a filer's directly reported quarter disagrees with its own
 -- year-to-date figures. Checks latest values against the latest annual figure.
-{{ config(severity = 'warn') }}
+{{ config(severity = 'warn', store_failures = true) }}
 
 with annual as (
     select

@@ -3,7 +3,7 @@
 -- asset-backed filings covering many series (one listing per series, but the file carries no
 -- series identifier); 1,453 appear on two different days. int_filings__daily_index keeps
 -- each pair's first appearance.
-{{ config(severity = 'warn') }}
+{{ config(severity = 'warn', store_failures = true) }}
 
 select
     accession_number,

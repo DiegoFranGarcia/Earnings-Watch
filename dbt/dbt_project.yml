@@ -7,6 +7,15 @@ model-paths: ["models"]
 seed-paths: ["seeds"]
 test-paths: ["tests"]
 
+# After every dbt invocation, record each result in AUDIT.DBT_RESULTS (macros/audit.sql).
+on-run-end:
+  - "{{ log_dbt_results(results) }}"
+
+# Stored test failures (store_failures) go to AUDIT, the schema TRANSFORMER can write.
+data_tests:
+  earningswatch:
+    +schema: audit
+
 models:
   earningswatch:
     staging:
