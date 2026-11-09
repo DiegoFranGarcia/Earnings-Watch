@@ -137,7 +137,8 @@ Every check that fired was investigated against the data before anything was cha
 | 2. Spark on EMR Serverless, benchmark published | ✅ |
 | 3. Snowflake warehouse: keyless S3 access, verified loads | ✅ |
 | 4. dbt star schema: company history, restatements, timeliness | ✅ |
-| 5–9. Orchestration end to end, observability, deployment, CI/CD, demo | |
+| 5. Orchestration end to end: asset-triggered DAGs, Cosmos, alerts | ✅ |
+| 6–9. Observability, deployment, CI/CD, demo | |
 
 A thin end-to-end slice (one quarter, DuckDB, dbt, Streamlit) was built first, so modelling
 problems surfaced in week three rather than week fifteen.
