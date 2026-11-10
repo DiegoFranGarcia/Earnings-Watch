@@ -1,0 +1,15 @@
+# The production image: the base image (airflow/Dockerfile) with the DAGs, the dbt project, a dbt
+# manifest and the production Compose file baked in, so the host runs exactly what one commit
+# contains. Built from the repository root by scripts/build_airflow_image.sh.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+COPY --chown=airflow:0 airflow/dags /opt/airflow/dags
+COPY --chown=airflow:0 dbt /opt/airflow/dbt
+COPY --chown=airflow:0 deploy/compose.yaml /opt/airflow/deploy/compose.yaml
+
+# The manifest Cosmos reads, built from exactly this code. Parsing needs no warehouse connection.
+RUN /opt/dbt_venv/bin/dbt parse --project-dir /opt/airflow/dbt --profiles-dir /opt/airflow/dbt --quiet
+
+ENV PYTHONPATH=/opt/airflow/dags \
+    DBT_PROJECT_DIR=/opt/airflow/dbt

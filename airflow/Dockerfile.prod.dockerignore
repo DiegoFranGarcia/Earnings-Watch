@@ -1,0 +1,10 @@
+# The production image is built from the repository root: send only what it bakes in.
+*
+!airflow/dags
+!dbt
+!deploy/compose.yaml
+**/__pycache__
+dbt/target
+dbt/logs
+dbt/dbt_packages
+dbt/*.duckdb

@@ -33,6 +33,7 @@ resource "aws_secretsmanager_secret" "host" {
     "svc-airflow-private-key" = "Snowflake private key of SVC_AIRFLOW (role LOADER)"
     "svc-dbt-private-key"     = "Snowflake private key of SVC_DBT (role TRANSFORMER)"
     "discord-webhook-url"     = "Discord webhook for pipeline alerts"
+    "airflow-internals"       = "Airflow's database password, Fernet key, JWT secret, admin password; SEC_USER_AGENT"
   }
 
   name                    = "earningswatch/${var.env}/${each.key}"
