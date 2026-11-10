@@ -21,3 +21,18 @@ module "airflow_platform" {
   emr_application_arn = module.spark.application_arn
   emr_job_role_arn    = module.spark.job_role_arn
 }
+
+module "airflow_host" {
+  source                = "../../modules/airflow_host"
+  env                   = "dev"
+  subnet_id             = module.airflow_platform.subnet_id
+  security_group_id     = module.airflow_platform.security_group_id
+  instance_profile_name = module.airflow_platform.instance_profile_name
+  image                 = var.airflow_image
+  spark_code_uri        = var.spark_code_uri
+  lake_bucket           = module.lake.bucket_name
+  emr_application_id    = module.spark.application_id
+  emr_job_role_arn      = module.spark.job_role_arn
+  snowflake_account     = "${var.snowflake_organization_name}-${var.snowflake_account_name}"
+  snowflake_database    = "EARNINGSWATCH_DEV"
+}

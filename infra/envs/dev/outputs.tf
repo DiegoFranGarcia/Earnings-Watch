@@ -17,3 +17,7 @@ output "ecr_repository_url" {
 output "airflow_secret_names" {
   value = module.airflow_platform.secret_names
 }
+
+output "airflow_instance_id" {
+  value = module.airflow_host.instance_id
+}

@@ -1,0 +1,136 @@
+#!/bin/bash
+# EarningsWatch Airflow host: first-boot bootstrap. Rendered by Terraform; contains no secrets
+# (they are fetched into memory on every start). Its log: /var/log/earningswatch-bootstrap.log
+set -euxo pipefail
+exec > >(tee -a /var/log/earningswatch-bootstrap.log) 2>&1
+
+dnf install -y docker
+systemctl enable --now docker
+
+# Docker Compose plugin: a pinned release, verified against a checksum pinned in the repository.
+mkdir -p /usr/local/lib/docker/cli-plugins
+plugin=/usr/local/lib/docker/cli-plugins/docker-compose
+curl -fsSL -o "$plugin" \
+  "https://github.com/docker/compose/releases/download/${compose_version}/docker-compose-linux-aarch64"
+echo "${compose_sha256}  $plugin" | sha256sum -c -
+chmod 755 "$plugin"
+
+mkdir -p /opt/earningswatch/logs /opt/earningswatch/deploy
+chown 50000:0 /opt/earningswatch/logs
+
+# Non-secret settings, fixed for the life of this host.
+cat > /opt/earningswatch/settings.env <<'SETTINGS'
+LAKE_BUCKET=${lake_bucket}
+EMR_APPLICATION_ID=${emr_application_id}
+EMR_JOB_ROLE_ARN=${emr_job_role_arn}
+SF_ACCOUNT=${snowflake_account}
+SF_DATABASE=${snowflake_database}
+SF_USER=SVC_AIRFLOW
+SF_PRIVATE_KEY_PATH=/opt/airflow/keys/svc_airflow_rsa_key.p8
+DBT_SNOWFLAKE_PRIVATE_KEY_PATH=/opt/airflow/keys/svc_dbt_rsa_key.p8
+EARNINGSWATCH_HOME=/opt/earningswatch
+KEYS_DIR=/run/earningswatch/keys
+ENV_FILE_PATH=/run/earningswatch/airflow.env
+SETTINGS
+
+# The current release: changed by earningswatch-deploy, read on every start.
+cat > /opt/earningswatch/release.env <<'RELEASE'
+AIRFLOW_IMAGE=${image}
+SPARK_CODE_URI=${spark_code_uri}
+RELEASE
+
+cat > /usr/local/bin/earningswatch-start <<'START'
+#!/bin/bash
+# Start (or restart) Airflow with the current release: secrets from Secrets Manager into memory,
+# the image from ECR, and the Compose file from inside that image, so they always match.
+set -euo pipefail
+home=/opt/earningswatch
+run=/run/earningswatch
+source "$home/release.env"
+
+secret() {
+  aws secretsmanager get-secret-value --region us-east-1 \
+    --secret-id "earningswatch/${env}/$1" --query SecretString --output text
+}
+
+# /run is in memory: nothing below is ever written to disk.
+umask 077
+mkdir -p "$run"
+install -d -m 0750 -o 50000 -g 0 "$run/keys"
+secret svc-airflow-private-key > "$run/keys/svc_airflow_rsa_key.p8"
+secret svc-dbt-private-key > "$run/keys/svc_dbt_rsa_key.p8"
+chown 50000:0 "$run"/keys/*.p8
+chmod 0400 "$run"/keys/*.p8
+{
+  cat "$home/settings.env"
+  echo "AIRFLOW_IMAGE=$AIRFLOW_IMAGE"
+  echo "SPARK_CODE_URI=$SPARK_CODE_URI"
+  echo "DISCORD_WEBHOOK_URL=$(secret discord-webhook-url)"
+  secret airflow-internals \
+    | python3 -c 'import json, sys; [print(k + "=" + v) for k, v in json.load(sys.stdin).items()]'
+} > "$run/airflow.env"
+
+registry=$(echo "$AIRFLOW_IMAGE" | cut -d/ -f1)
+aws ecr get-login-password --region us-east-1 \
+  | docker login --username AWS --password-stdin "$registry"
+docker pull --quiet "$AIRFLOW_IMAGE"
+docker run --rm --entrypoint cat "$AIRFLOW_IMAGE" /opt/airflow/deploy/compose.yaml \
+  > "$home/deploy/compose.yaml"
+docker compose -p earningswatch -f "$home/deploy/compose.yaml" --env-file "$run/airflow.env" \
+  up -d --remove-orphans --wait --wait-timeout 600
+echo "running $AIRFLOW_IMAGE"
+START
+
+cat > /usr/local/bin/earningswatch-deploy <<'DEPLOY'
+#!/bin/bash
+# Deploy an image, and optionally new Spark code: record it as the current release and restart.
+# If the new release fails to start, roll back to the previous one and report the failure.
+#   earningswatch-deploy <repository:commit> [s3://.../artifacts/spark/<commit>]
+set -euo pipefail
+release=/opt/earningswatch/release.env
+if [ $# -lt 1 ]; then
+  echo "usage: earningswatch-deploy <image> [spark_code_uri]" >&2
+  exit 2
+fi
+source "$release"
+spark="$SPARK_CODE_URI"
+if [ $# -ge 2 ]; then spark="$2"; fi
+
+cp "$release" "$release.previous"
+printf 'AIRFLOW_IMAGE=%s\nSPARK_CODE_URI=%s\n' "$1" "$spark" > "$release.new"
+mv "$release.new" "$release"
+# Through systemd, so the service's state always reflects what is running.
+if ! systemctl restart earningswatch.service; then
+  echo "deploy of $1 failed; rolling back" >&2
+  mv "$release.previous" "$release"
+  systemctl restart earningswatch.service
+  exit 1
+fi
+echo "deployed $1"
+DEPLOY
+
+chmod 755 /usr/local/bin/earningswatch-start /usr/local/bin/earningswatch-deploy
+
+cat > /etc/systemd/system/earningswatch.service <<'UNIT'
+[Unit]
+Description=EarningsWatch Airflow
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# The instance role's credentials can take a moment after boot: wait for them (up to 5 minutes).
+ExecStartPre=/usr/bin/timeout 300 /bin/bash -c 'until aws sts get-caller-identity --region us-east-1 >/dev/null 2>&1; do sleep 5; done'
+ExecStart=/usr/local/bin/earningswatch-start
+ExecStop=/usr/bin/docker compose -p earningswatch -f /opt/earningswatch/deploy/compose.yaml --env-file /run/earningswatch/airflow.env down
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable --now earningswatch.service
+echo "bootstrap complete"

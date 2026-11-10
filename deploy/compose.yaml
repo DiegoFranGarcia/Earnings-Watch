@@ -69,7 +69,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 30s
+      start_period: 300s  # slow first boots (CPU credits) are not failures
     restart: always
     depends_on:
       <<: *airflow-common-depends-on
@@ -84,7 +84,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 30s
+      start_period: 300s  # slow first boots (CPU credits) are not failures
     restart: always
     depends_on:
       <<: *airflow-common-depends-on
@@ -99,7 +99,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 30s
+      start_period: 300s  # slow first boots (CPU credits) are not failures
     restart: always
     depends_on:
       <<: *airflow-common-depends-on
@@ -114,7 +114,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 30s
+      start_period: 300s  # slow first boots (CPU credits) are not failures
     restart: always
     depends_on:
       <<: *airflow-common-depends-on

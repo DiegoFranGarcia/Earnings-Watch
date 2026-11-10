@@ -1,7 +1,7 @@
 # The production image: the base image (airflow/Dockerfile) with the DAGs, the dbt project, a dbt
 # manifest and the production Compose file baked in, so the host runs exactly what one commit
 # contains. Built from the repository root by scripts/build_airflow_image.sh.
-ARG BASE_IMAGE
+ARG BASE_IMAGE=earnings-watch-airflow:local
 FROM ${BASE_IMAGE}
 
 COPY --chown=airflow:0 airflow/dags /opt/airflow/dags
