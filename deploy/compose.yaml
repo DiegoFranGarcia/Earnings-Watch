@@ -133,7 +133,8 @@ services:
         set -euo pipefail
         /entrypoint airflow version
         airflow pools set sec_api 2 "SEC requests: the fair-access limit, shared by every DAG"
-        airflow pools set emr 1 "One Spark job at a time"
+        # Spark tasks defer while EMR runs; the pool must still count them, or two jobs could run.
+        airflow pools set emr 1 "One Spark job at a time" --include-deferred
         airflow pools set snowflake 4 "Concurrent Snowflake sessions"
     environment:
       <<: *airflow-common-env
