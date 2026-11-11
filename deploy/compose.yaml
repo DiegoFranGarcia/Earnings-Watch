@@ -59,6 +59,10 @@ services:
       start_period: 5s
     restart: always
 
+  # Health checks: on a t4g with 30% CPU baseline, the official `airflow jobs check` every 30 s
+  # (a full Airflow process each time) used 32% of the CPU, three times Airflow's own work. Here:
+  # cheap HTTP checks where a service serves one, rare checks otherwise, and frequent checks only
+  # while starting (start_interval), so a deploy still sees the stack become healthy promptly.
   airflow-apiserver:
     <<: *airflow-common
     command: api-server
@@ -66,10 +70,11 @@ services:
       - "127.0.0.1:${API_PORT:-8080}:8080"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
-      interval: 30s
-      timeout: 10s
+      interval: 60s
+      timeout: 30s
       retries: 5
-      start_period: 300s  # slow first boots (CPU credits) are not failures
+      start_period: 300s
+      start_interval: 15s
     restart: always
     depends_on:
       <<: *airflow-common-depends-on
@@ -80,11 +85,13 @@ services:
     <<: *airflow-common
     command: scheduler
     healthcheck:
-      test: ["CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"']
-      interval: 30s
-      timeout: 10s
+      # The scheduler's own health endpoint (AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK): a tiny request.
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 60s
+      timeout: 30s
       retries: 5
-      start_period: 300s  # slow first boots (CPU credits) are not failures
+      start_period: 300s
+      start_interval: 15s
     restart: always
     depends_on:
       <<: *airflow-common-depends-on
@@ -95,11 +102,13 @@ services:
     <<: *airflow-common
     command: dag-processor
     healthcheck:
+      # No health endpoint: the full CLI check, but rarely once healthy.
       test: ["CMD-SHELL", 'airflow jobs check --job-type DagProcessorJob --hostname "$${HOSTNAME}"']
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 300s  # slow first boots (CPU credits) are not failures
+      interval: 600s
+      timeout: 60s
+      retries: 3
+      start_period: 300s
+      start_interval: 15s
     restart: always
     depends_on:
       <<: *airflow-common-depends-on
@@ -110,11 +119,13 @@ services:
     <<: *airflow-common
     command: triggerer
     healthcheck:
+      # No health endpoint: the full CLI check, but rarely once healthy.
       test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 300s  # slow first boots (CPU credits) are not failures
+      interval: 600s
+      timeout: 60s
+      retries: 3
+      start_period: 300s
+      start_interval: 15s
     restart: always
     depends_on:
       <<: *airflow-common-depends-on
