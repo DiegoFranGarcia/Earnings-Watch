@@ -109,7 +109,46 @@ fi
 echo "deployed $1"
 DEPLOY
 
-chmod 755 /usr/local/bin/earningswatch-start /usr/local/bin/earningswatch-deploy
+cat > /usr/local/bin/earningswatch-backup <<'BACKUP'
+#!/bin/bash
+# Back up Airflow's metadata database to S3: a dated copy, and latest.sql.gz for a rebuild.
+set -euo pipefail
+source /opt/earningswatch/settings.env
+day=$(date -u +%F)
+dump=$(mktemp)
+docker exec earningswatch-postgres-1 pg_dump -U airflow --clean --if-exists airflow | gzip > "$dump"
+aws s3 cp --only-show-errors "$dump" "s3://$LAKE_BUCKET/airflow/backups/airflow-$day.sql.gz"
+aws s3 cp --only-show-errors "$dump" "s3://$LAKE_BUCKET/airflow/backups/latest.sql.gz"
+echo "backed up $(stat -c %s "$dump") bytes to s3://$LAKE_BUCKET/airflow/backups/airflow-$day.sql.gz"
+rm -f "$dump"
+BACKUP
+
+chmod 755 /usr/local/bin/earningswatch-start /usr/local/bin/earningswatch-deploy \
+  /usr/local/bin/earningswatch-backup
+
+cat > /etc/systemd/system/earningswatch-backup.service <<'BACKUPSERVICE'
+[Unit]
+Description=Back up the EarningsWatch Airflow database to S3
+Requires=earningswatch.service
+After=earningswatch.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/earningswatch-backup
+BACKUPSERVICE
+
+# 09:30 UTC: inside the host's daily window (05:45 to 09:45), after the daily DAGs.
+cat > /etc/systemd/system/earningswatch-backup.timer <<'BACKUPTIMER'
+[Unit]
+Description=Back up the EarningsWatch Airflow database daily
+
+[Timer]
+OnCalendar=*-*-* 09:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+BACKUPTIMER
 
 cat > /etc/systemd/system/earningswatch.service <<'UNIT'
 [Unit]
@@ -133,4 +172,5 @@ UNIT
 
 systemctl daemon-reload
 systemctl enable --now earningswatch.service
+systemctl enable --now earningswatch-backup.timer
 echo "bootstrap complete"

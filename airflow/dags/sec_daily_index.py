@@ -37,14 +37,14 @@ DEFAULT_ARGS = {
     catchup=False,  # history is loaded deliberately with `airflow backfill create`
     max_active_runs=2,
     default_args=DEFAULT_ARGS,
-    # Finished by 12:00 UTC (06:00 + 6 h), or an alert: catches a run that is stuck or never
-    # started, which no failure callback would report.
+    # Finished by 09:00 UTC (06:00 + 3 h), or an alert: catches a run that is stuck or never
+    # started, which no failure callback would report. Before the host's scheduled stop (09:45).
     deadline=DeadlineAlert(
         reference=DeadlineReference.DAGRUN_LOGICAL_DATE,
-        interval=timedelta(hours=6),
+        interval=timedelta(hours=3),
         callback=AsyncCallback(
             "earningswatch.callbacks.notify_deadline_missed",
-            kwargs={"dag_id": "sec_daily_index", "deadline": "12:00 UTC"},
+            kwargs={"dag_id": "sec_daily_index", "deadline": "09:00 UTC"},
         ),
     ),
     tags=["earningswatch", "ingestion"],

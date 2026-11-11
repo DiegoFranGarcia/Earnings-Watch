@@ -121,12 +121,20 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
-  # Migrates the metadata database and creates the admin user, then exits. The official image's
-  # entrypoint does both when these two variables are set.
+  # Migrates the metadata database and creates the admin user (the official image's entrypoint does
+  # both when the two variables below are set), then creates the pools every DAG relies on: a task
+  # in a pool that does not exist waits forever, silently. `pools set` is idempotent.
   airflow-init:
     <<: *airflow-common
     entrypoint: /bin/bash
-    command: ["-c", "/entrypoint airflow version"]
+    command:
+      - -c
+      - |
+        set -euo pipefail
+        /entrypoint airflow version
+        airflow pools set sec_api 2 "SEC requests: the fair-access limit, shared by every DAG"
+        airflow pools set emr 1 "One Spark job at a time"
+        airflow pools set snowflake 4 "Concurrent Snowflake sessions"
     environment:
       <<: *airflow-common-env
       _AIRFLOW_DB_MIGRATE: "true"
