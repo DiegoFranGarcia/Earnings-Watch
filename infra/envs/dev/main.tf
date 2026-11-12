@@ -20,6 +20,7 @@ module "airflow_platform" {
   lake_bucket_arn     = module.lake.bucket_arn
   emr_application_arn = module.spark.application_arn
   emr_job_role_arn    = module.spark.job_role_arn
+  alert_email         = var.alert_email
 }
 
 module "airflow_host" {
@@ -35,4 +36,5 @@ module "airflow_host" {
   emr_job_role_arn      = module.spark.job_role_arn
   snowflake_account     = "${var.snowflake_organization_name}-${var.snowflake_account_name}"
   snowflake_database    = "EARNINGSWATCH_DEV"
+  alerts_topic_arn      = module.airflow_platform.alerts_topic_arn
 }

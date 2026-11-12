@@ -53,6 +53,32 @@ resource "aws_s3_bucket_lifecycle_configuration" "lake" {
       days = 30
     }
   }
+
+  rule {
+    id     = "expire-airflow-task-logs-after-30-days"
+    status = "Enabled"
+    filter {
+      prefix = "airflow/logs/"
+    }
+
+    expiration {
+      days = 30
+    }
+  }
+
+  # Dated backups only: latest.sql.gz is never expired, so even after a long pause a rebuild
+  # still has a database to restore.
+  rule {
+    id     = "expire-dated-airflow-backups-after-30-days"
+    status = "Enabled"
+    filter {
+      prefix = "airflow/backups/airflow-"
+    }
+
+    expiration {
+      days = 30
+    }
+  }
 }
 
 data "aws_iam_policy_document" "tls_only" {

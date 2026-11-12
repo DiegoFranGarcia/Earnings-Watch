@@ -31,3 +31,9 @@ variable "vpc_cidr" {
   type    = string
   default = "10.20.0.0/16"
 }
+
+variable "alert_email" {
+  description = "Where alarms are emailed. Empty: the topic exists, with no subscription."
+  type        = string
+  default     = ""
+}

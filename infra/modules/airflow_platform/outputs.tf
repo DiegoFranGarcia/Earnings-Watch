@@ -21,3 +21,7 @@ output "ecr_repository_url" {
 output "secret_names" {
   value = { for key, secret in aws_secretsmanager_secret.host : key => secret.name }
 }
+
+output "alerts_topic_arn" {
+  value = aws_sns_topic.alerts.arn
+}

@@ -66,3 +66,20 @@ variable "compose_sha256" {
   type        = string
   default     = "42cfa75f51ad0ccf290bad37899e0038a8c10a0069e85233ecc1d53e3ff1347d"
 }
+
+variable "alerts_topic_arn" {
+  description = "SNS topic the host's alarms publish to."
+  type        = string
+}
+
+variable "start_cron" {
+  description = "When the host starts (UTC): before the 06:00 daily run."
+  type        = string
+  default     = "cron(45 5 * * ? *)"
+}
+
+variable "stop_cron" {
+  description = "When the host stops (UTC): after the 09:00 deadline and the 09:30 backup."
+  type        = string
+  default     = "cron(45 9 * * ? *)"
+}
