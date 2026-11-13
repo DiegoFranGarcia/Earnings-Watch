@@ -123,8 +123,32 @@ echo "backed up $(stat -c %s "$dump") bytes to s3://$LAKE_BUCKET/airflow/backups
 rm -f "$dump"
 BACKUP
 
+cat > /usr/local/bin/earningswatch-restore <<'RESTORE'
+#!/bin/bash
+# Restore Airflow's metadata database from S3, then restart Airflow with its history back.
+#   earningswatch-restore                            (latest.sql.gz)
+#   earningswatch-restore airflow-2026-11-13.sql.gz  (a dated backup)
+set -euo pipefail
+source /opt/earningswatch/settings.env
+name=latest.sql.gz
+if [ $# -ge 1 ]; then name="$1"; fi
+dump=$(mktemp)
+aws s3 cp --only-show-errors "s3://$LAKE_BUCKET/airflow/backups/$name" "$dump"
+# Stop everything that writes to the database; keep the database itself running.
+docker compose -p earningswatch -f /opt/earningswatch/deploy/compose.yaml \
+  --env-file /run/earningswatch/airflow.env \
+  stop airflow-apiserver airflow-scheduler airflow-dag-processor airflow-triggerer
+# The backup drops and recreates every table (pg_dump --clean --if-exists). Stop at the first
+# error rather than leave a half-restored database.
+gunzip -c "$dump" \
+  | docker exec -i earningswatch-postgres-1 psql -U airflow -d airflow -v ON_ERROR_STOP=1 --quiet
+rm -f "$dump"
+systemctl restart earningswatch.service
+echo "restored $name"
+RESTORE
+
 chmod 755 /usr/local/bin/earningswatch-start /usr/local/bin/earningswatch-deploy \
-  /usr/local/bin/earningswatch-backup
+  /usr/local/bin/earningswatch-backup /usr/local/bin/earningswatch-restore
 
 cat > /etc/systemd/system/earningswatch-backup.service <<'BACKUPSERVICE'
 [Unit]
