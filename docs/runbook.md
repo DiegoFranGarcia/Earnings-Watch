@@ -97,6 +97,24 @@ the load and dbt follow.
 - **A test failed:** read the rows, never just raise the threshold. Problems in filer data warn;
   problems in our logic fail (ADR 8).
 
+## Rebuild the host from scratch
+
+The host holds nothing that is not in code, the image, Secrets Manager or the nightly backup. To
+replace it (lost, corrupted, or to pick up a new AMI or bootstrap):
+
+~~~bash
+terraform -chdir=infra/envs/dev plan -destroy -target=module.airflow_host -out=destroy.tfplan
+terraform -chdir=infra/envs/dev apply destroy.tfplan      # check: 7 to destroy, nothing else
+terraform -chdir=infra/envs/dev plan -out=dev.tfplan       # check: 7 to add
+terraform -chdir=infra/envs/dev apply dev.tfplan
+# wait until: scripts/host_exec.sh 'systemctl is-active earningswatch' prints active
+scripts/host_exec.sh 'earningswatch-restore'              # or: earningswatch-restore airflow-<date>.sql.gz
+~~~
+
+Check each step's result before the next. Drilled on 2026-11-13: **19 minutes 42 seconds** from
+destroy to a healthy Airflow with that morning's runs restored. `airflow.auto.tfvars` names the
+image a new host starts with; point it at the current release first.
+
 ## Rotate a Snowflake service user's key
 
 Snowflake holds two public keys per user, so a key can change with no downtime:
