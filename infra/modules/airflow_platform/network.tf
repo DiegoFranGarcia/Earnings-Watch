@@ -71,3 +71,15 @@ resource "aws_vpc_security_group_egress_rule" "https" {
   from_port         = 443
   to_port           = 443
 }
+
+# Certificate revocation checks (OCSP) use plain HTTP by design: the responses are signed, so they
+# need no TLS. Without this rule, Snowflake's connector waited ~100 s for OCSP to time out on a cold
+# cache, and its 60-second login token expired first: "JWT token is invalid" (2026-11-12).
+resource "aws_vpc_security_group_egress_rule" "http_for_ocsp" {
+  security_group_id = aws_security_group.host.id
+  description       = "HTTP for certificate revocation checks (OCSP), whose responses are signed"
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "tcp"
+  from_port         = 80
+  to_port           = 80
+}
