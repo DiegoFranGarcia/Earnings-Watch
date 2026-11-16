@@ -18,7 +18,17 @@ expected_dags="company_tickers_snapshot dbt_build sec_daily_index sec_fsds_quart
 cd "$(git rev-parse --show-toplevel)"
 
 home="$(mktemp -d)"
-trap 'docker compose -p ew-smoke -f deploy/compose.yaml --env-file "$home/airflow.env" down -v >/dev/null 2>&1; rm -rf "$home"' EXIT
+# Cleanup is best effort and never changes the result: the test's own exit status is kept. The
+# containers write logs as their own user (50000), which a Linux runner cannot delete, so those are
+# removed from inside a container running as root, using the image that is already here.
+cleanup() {
+  docker compose -p ew-smoke -f deploy/compose.yaml --env-file "$home/airflow.env" down -v >/dev/null 2>&1 || true
+  if ! rm -rf "$home" 2>/dev/null; then
+    docker run --rm --user 0 --entrypoint rm -v "$home:/cleanup" "$image" -rf /cleanup/logs >/dev/null 2>&1 || true
+    rm -rf "$home" 2>/dev/null || echo "warning: could not remove $home" >&2
+  fi
+}
+trap 'status=$?; cleanup; exit $status' EXIT
 mkdir -p "$home/logs" "$home/keys"
 chmod 777 "$home/logs"
 
