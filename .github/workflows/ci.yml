@@ -9,6 +9,12 @@ on:
 permissions:
   contents: read
 
+# Every step runs in bash with -e and -o pipefail. Without an explicit shell, GitHub uses bash -e
+# alone, and a failure before a pipe (deploy | tee) would pass silently.
+defaults:
+  run:
+    shell: bash
+
 # A newer push cancels a still-running check of an older pull request. Runs on main are never
 # cancelled: a release stopped halfway would leave published artifacts without a release.
 concurrency:
@@ -99,6 +105,7 @@ jobs:
       - name: Smoke test the image (every service healthy, every DAG imported)
         env:
           IMAGE: ${{ steps.image.outputs.image }}
+          SMOKE_TEST_THROWAWAY: "1"  # generated keys and secrets: CI never holds a real one
         run: |
           docker pull --quiet "$IMAGE" >/dev/null
           scripts/smoke_test_prod_stack.sh "$IMAGE"
