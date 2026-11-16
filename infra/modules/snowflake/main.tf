@@ -15,12 +15,14 @@ locals {
     WH_LOAD      = { timeout = 3600, comment = "COPY INTO from S3 (LOADER)" }
     WH_TRANSFORM = { timeout = 3600, comment = "dbt builds (TRANSFORMER)" }
     WH_REPORTING = { timeout = 300, comment = "Dashboard queries (REPORTER)" }
+    WH_CI        = { timeout = 900, comment = "Slim dbt builds on pull requests (CI)" }
   }
 
   roles = {
     LOADER      = { warehouse = "WH_LOAD", comment = "Loads RAW from S3; writes load audit rows" }
     TRANSFORMER = { warehouse = "WH_TRANSFORM", comment = "Reads RAW; dbt builds everything downstream" }
     REPORTER    = { warehouse = "WH_REPORTING", comment = "Reads MARTS only" }
+    CI          = { warehouse = "WH_CI", comment = "Pull-request builds: reads production, writes EARNINGSWATCH_CI only" }
   }
 
   # Privileges on schemas, per role. Objects a role creates, it owns.
@@ -34,6 +36,13 @@ locals {
     "TRANSFORMER.SNAPSHOTS"    = ["USAGE", "CREATE TABLE", "CREATE VIEW"]
     "TRANSFORMER.AUDIT"        = ["USAGE", "CREATE TABLE"]
     "REPORTER.MARTS"           = ["USAGE"]
+    # CI reads production: the sources, and every built schema dbt --defer may refer to.
+    "CI.RAW"          = ["USAGE"]
+    "CI.STAGING"      = ["USAGE"]
+    "CI.INTERMEDIATE" = ["USAGE"]
+    "CI.MARTS"        = ["USAGE"]
+    "CI.SNAPSHOTS"    = ["USAGE"]
+    "CI.AUDIT"        = ["USAGE"]
   }
 
   # Read access to tables and views someone else owns, now and in future.
@@ -42,6 +51,14 @@ locals {
     "TRANSFORMER.AUDIT.TABLES" = { role = "TRANSFORMER", schema = "AUDIT", plural = "TABLES" }
     "REPORTER.MARTS.TABLES"    = { role = "REPORTER", schema = "MARTS", plural = "TABLES" }
     "REPORTER.MARTS.VIEWS"     = { role = "REPORTER", schema = "MARTS", plural = "VIEWS" }
+    "CI.RAW.TABLES"            = { role = "CI", schema = "RAW", plural = "TABLES" }
+    "CI.STAGING.TABLES"        = { role = "CI", schema = "STAGING", plural = "TABLES" }
+    "CI.STAGING.VIEWS"         = { role = "CI", schema = "STAGING", plural = "VIEWS" }
+    "CI.INTERMEDIATE.TABLES"   = { role = "CI", schema = "INTERMEDIATE", plural = "TABLES" }
+    "CI.MARTS.TABLES"          = { role = "CI", schema = "MARTS", plural = "TABLES" }
+    "CI.MARTS.VIEWS"           = { role = "CI", schema = "MARTS", plural = "VIEWS" }
+    "CI.SNAPSHOTS.TABLES"      = { role = "CI", schema = "SNAPSHOTS", plural = "TABLES" }
+    "CI.AUDIT.TABLES"          = { role = "CI", schema = "AUDIT", plural = "TABLES" }
   }
 
   # Expand the per-role maps across every granted database.
@@ -172,6 +189,17 @@ resource "snowflake_grant_privileges_to_account_role" "read_future" {
       object_type_plural = each.value.plural
       in_schema          = snowflake_schema.this[each.value.schema].fully_qualified_name
     }
+  }
+}
+
+# CI creates its own schemas in the CI database (one set per pull request) and owns them, so it
+# can build in them and drop them; it can create nothing anywhere else.
+resource "snowflake_grant_privileges_to_account_role" "ci_database" {
+  account_role_name = snowflake_account_role.this["CI"].name
+  privileges        = ["USAGE", "CREATE SCHEMA"]
+  on_account_object {
+    object_type = "DATABASE"
+    object_name = snowflake_database.this["EARNINGSWATCH_CI"].name
   }
 }
 

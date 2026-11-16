@@ -19,7 +19,8 @@
 {%- endmacro %}
 
 {% macro log_dbt_results(results) %}
-    {% if execute and results %}
+    {#- Pull-request builds (the ci target) are not pipeline runs: GitHub's logs record them. -#}
+    {% if execute and results and target.name != 'ci' %}
         {% set audit_table = target.database ~ ".AUDIT.DBT_RESULTS" %}
         {% do run_query(
             "create table if not exists " ~ audit_table ~ " ("

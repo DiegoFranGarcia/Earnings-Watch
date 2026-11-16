@@ -15,3 +15,16 @@ earningswatch:
       threads: 4
       # Every statement dbt runs is tagged, so its credits can be attributed.
       query_tag: "earningswatch:dbt:{{ env_var('DBT_RUN_LABEL', 'manual') }}"
+    # Pull requests (slim CI): SVC_CI builds into EARNINGSWATCH_CI, in schemas named after the pull
+    # request (DBT_CI_SCHEMA, e.g. PR_12), reading sources and unchanged models from production.
+    ci:
+      type: snowflake
+      account: "{{ env_var('DBT_SNOWFLAKE_ACCOUNT', 'TOHCGIQ-QM22072') }}"
+      user: SVC_CI
+      private_key_path: "{{ env_var('DBT_SNOWFLAKE_PRIVATE_KEY_PATH', env_var('HOME', '') ~ '/.snowflake/keys/svc_ci_rsa_key.p8') }}"
+      role: CI
+      warehouse: WH_CI
+      database: EARNINGSWATCH_CI
+      schema: "{{ env_var('DBT_CI_SCHEMA') }}"
+      threads: 4
+      query_tag: "earningswatch:ci:{{ env_var('DBT_CI_SCHEMA') }}"

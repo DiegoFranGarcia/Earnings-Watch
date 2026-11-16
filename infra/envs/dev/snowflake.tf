@@ -36,6 +36,7 @@ module "snowflake" {
     SVC_AIRFLOW   = { role = "LOADER", warehouse = "WH_LOAD", public_key_path = "~/.snowflake/keys/svc_airflow_rsa_key.pub" }
     SVC_DBT       = { role = "TRANSFORMER", warehouse = "WH_TRANSFORM", public_key_path = "~/.snowflake/keys/svc_dbt_rsa_key.pub" }
     SVC_STREAMLIT = { role = "REPORTER", warehouse = "WH_REPORTING", public_key_path = "~/.snowflake/keys/svc_streamlit_rsa_key.pub" }
+    SVC_CI        = { role = "CI", warehouse = "WH_CI", public_key_path = "~/.snowflake/keys/svc_ci_rsa_key.pub" }
   }
 }
 
