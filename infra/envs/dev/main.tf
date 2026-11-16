@@ -38,3 +38,13 @@ module "airflow_host" {
   snowflake_database    = "EARNINGSWATCH_DEV"
   alerts_topic_arn      = module.airflow_platform.alerts_topic_arn
 }
+
+module "github_oidc" {
+  source             = "../../modules/github_oidc"
+  env                = "dev"
+  account_id         = data.aws_caller_identity.current.account_id
+  repository         = "DiegoFranGarcia/Earnings-Watch"
+  lake_bucket_arn    = module.lake.bucket_arn
+  ecr_repository_arn = module.airflow_platform.ecr_repository_arn
+  host_name_tag      = "earnings-watch-dev-airflow"
+}

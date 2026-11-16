@@ -21,3 +21,11 @@ output "airflow_secret_names" {
 output "airflow_instance_id" {
   value = module.airflow_host.instance_id
 }
+
+output "github_plan_role_arn" {
+  value = module.github_oidc.plan_role_arn
+}
+
+output "github_deploy_role_arn" {
+  value = module.github_oidc.deploy_role_arn
+}

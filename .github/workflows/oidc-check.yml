@@ -1,0 +1,49 @@
+name: OIDC check
+
+# Run by hand (Actions > OIDC check > Run workflow) to prove both sides of the AWS trust: main's
+# production environment can deploy, and the pull-request role refuses anything that is not one.
+on: workflow_dispatch
+
+permissions:
+  id-token: write # lets a job ask GitHub for its signed OIDC token
+  contents: read
+
+jobs:
+  deploy-role:
+    runs-on: ubuntu-24.04
+    environment: production
+    steps:
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd  # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Who am I
+        run: aws sts get-caller-identity --query Arn --output text
+
+      - name: Can list the image repository
+        run: aws ecr describe-images --repository-name earnings-watch-dev/airflow --max-items 1 --query 'imageDetails[0].imageTags' --output text
+
+      - name: Cannot read secrets
+        run: |
+          if aws secretsmanager get-secret-value --secret-id earningswatch/dev/discord-webhook-url >/dev/null 2>&1; then
+            echo "UNEXPECTED: the deploy role read a secret"; exit 1
+          fi
+          echo "refused, as intended"
+
+  plan-role-outside-a-pull-request:
+    runs-on: ubuntu-24.04
+    steps:
+      - id: assume
+        continue-on-error: true
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd  # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: The pull-request role must refuse a manual run
+        run: |
+          if [ "${{ steps.assume.outcome }}" = "success" ]; then
+            echo "UNEXPECTED: gha-plan was assumed outside a pull request"; exit 1
+          fi
+          echo "refused, as intended"

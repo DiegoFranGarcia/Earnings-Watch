@@ -25,3 +25,7 @@ output "secret_names" {
 output "alerts_topic_arn" {
   value = aws_sns_topic.alerts.arn
 }
+
+output "ecr_repository_arn" {
+  value = aws_ecr_repository.airflow.arn
+}
