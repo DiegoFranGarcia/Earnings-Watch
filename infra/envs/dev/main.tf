@@ -40,11 +40,13 @@ module "airflow_host" {
 }
 
 module "github_oidc" {
-  source             = "../../modules/github_oidc"
-  env                = "dev"
-  account_id         = data.aws_caller_identity.current.account_id
-  repository         = "DiegoFranGarcia/Earnings-Watch"
-  lake_bucket_arn    = module.lake.bucket_arn
-  ecr_repository_arn = module.airflow_platform.ecr_repository_arn
-  host_name_tag      = "earnings-watch-dev-airflow"
+  source              = "../../modules/github_oidc"
+  env                 = "dev"
+  account_id          = data.aws_caller_identity.current.account_id
+  repository          = "DiegoFranGarcia/Earnings-Watch"
+  repository_owner_id = "160972168"  # gh api users/DiegoFranGarcia --jq .id
+  repository_id       = "1422352027" # gh api repos/DiegoFranGarcia/Earnings-Watch --jq .id
+  lake_bucket_arn     = module.lake.bucket_arn
+  ecr_repository_arn  = module.airflow_platform.ecr_repository_arn
+  host_name_tag       = "earnings-watch-dev-airflow"
 }

@@ -28,3 +28,13 @@ variable "host_name_tag" {
   description = "Name tag of the Airflow host, the only instance deploys may send commands to."
   type        = string
 }
+
+variable "repository_owner_id" {
+  description = "The account's permanent numeric ID, as in GitHub's OIDC subject claim."
+  type        = string
+}
+
+variable "repository_id" {
+  description = "The repository's permanent numeric ID, as in GitHub's OIDC subject claim."
+  type        = string
+}

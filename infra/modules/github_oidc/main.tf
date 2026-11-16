@@ -3,6 +3,17 @@
 # environment); AWS checks the signature, then each role's conditions, which pin this repository
 # exactly. Never use a wildcard in the repository: any GitHub repository could then assume the role.
 
+# GitHub's subject claim names the account and repository with their permanent numeric IDs, e.g.
+# repo:Owner@160972168/Name@1422352027:pull_request. A name can be freed and reused by someone else;
+# an ID never is, so matching IDs means a different repository with the same name matches nothing.
+locals {
+  subject = format(
+    "repo:%s@%s/%s@%s",
+    split("/", var.repository)[0], var.repository_owner_id,
+    split("/", var.repository)[1], var.repository_id,
+  )
+}
+
 resource "aws_iam_openid_connect_provider" "github" {
   url            = "https://token.actions.githubusercontent.com"
   client_id_list = ["sts.amazonaws.com"]
@@ -10,8 +21,8 @@ resource "aws_iam_openid_connect_provider" "github" {
 
 data "aws_iam_policy_document" "trust" {
   for_each = {
-    plan   = "repo:${var.repository}:pull_request"           # any pull request in this repository
-    deploy = "repo:${var.repository}:environment:production" # only main may use this environment
+    plan   = "${local.subject}:pull_request"           # any pull request in this repository
+    deploy = "${local.subject}:environment:production" # only main may use this environment
   }
 
   statement {
