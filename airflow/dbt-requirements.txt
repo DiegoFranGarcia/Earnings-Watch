@@ -1,3 +1,3 @@
 # Installed into /opt/dbt_venv, separate from Airflow's Python.
 dbt-core==1.12.6
-dbt-snowflake==1.12.3
+dbt-snowflake==1.12.4

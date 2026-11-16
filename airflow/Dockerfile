@@ -9,10 +9,12 @@ ARG PYTHON_VERSION
 
 # dbt in its own virtual environment, so its dependencies never clash with Airflow's.
 USER root
-COPY dbt-requirements.txt /tmp/dbt-requirements.txt
+# dbt-constraints.txt freezes every library in it, so every build installs the same versions.
+COPY dbt-requirements.txt dbt-constraints.txt /tmp/
 RUN python -m venv /opt/dbt_venv \
-    && /opt/dbt_venv/bin/pip install --no-cache-dir -r /tmp/dbt-requirements.txt \
-    && rm /tmp/dbt-requirements.txt
+    && /opt/dbt_venv/bin/pip install --no-cache-dir \
+      -r /tmp/dbt-requirements.txt --constraint /tmp/dbt-constraints.txt \
+    && rm /tmp/dbt-requirements.txt /tmp/dbt-constraints.txt
 
 # Airflow providers, pinned by Airflow's own tested constraints file, except for the few pins in
 # constraint-overrides.txt (each fixes a published vulnerability). The overridden packages are
