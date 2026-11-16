@@ -66,6 +66,7 @@ fi
 chmod 600 "$home/airflow.env"
 
 compose=(docker compose -p ew-smoke -f deploy/compose.yaml --env-file "$home/airflow.env")
+"${compose[@]}" down -v >/dev/null 2>&1 || true  # a stack left by an interrupted run must not be reused
 failures=0
 fail() { echo "FAIL: $1" >&2; failures=$((failures + 1)); }
 
