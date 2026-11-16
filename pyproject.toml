@@ -5,7 +5,7 @@ description = "Flags public companies whose reported earnings outrun their cash,
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "dbt-snowflake==1.12.3",
+    "dbt-snowflake==1.12.4",
 ]
 
 [dependency-groups]
@@ -16,7 +16,8 @@ dev = [
     "sqlfluff==4.4.0",
     # Same versions as the Airflow 3.3.1 constraints, so tests behave like the containers.
     "requests==2.34.2",
-    "urllib3==2.7.0",
+    "urllib3==2.8.0",  # airflow/constraint-overrides.txt
+    "certifi==2026.10.23",  # airflow/constraint-overrides.txt
     "responses==0.26.3",
     "boto3==1.43.56",
     "botocore[crt]==1.43.56",  # [crt] adds awscrt, which `aws login` credentials need
@@ -29,7 +30,7 @@ dev = [
     # The slice's dashboard.
     "streamlit==1.65.0",
     "pyspark==4.0.2",
-    "snowflake-connector-python==4.7.2",
+    "snowflake-connector-python==4.7.3",  # airflow/constraint-overrides.txt
 ]
 
 [tool.uv]

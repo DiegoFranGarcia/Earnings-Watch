@@ -1,0 +1,10 @@
+# Pins that replace Airflow's own constraints, each fixing a published vulnerability (Dependabot).
+# pyproject.toml's dev group pins the same versions, so local tests match the containers.
+# Remove an override once Airflow's constraints include the fix.
+#
+# certifi: the certificate authorities every HTTPS call trusts; older bundles trust distrusted CAs.
+certifi==2026.10.23
+# urllib3: the HTTP library under boto3, requests and the SEC client.
+urllib3==2.8.0
+# snowflake-connector-python: every load and the volume gate connect through it.
+snowflake-connector-python==4.7.3

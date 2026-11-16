@@ -14,10 +14,19 @@ RUN python -m venv /opt/dbt_venv \
     && /opt/dbt_venv/bin/pip install --no-cache-dir -r /tmp/dbt-requirements.txt \
     && rm /tmp/dbt-requirements.txt
 
-# Airflow providers, pinned by Airflow's own tested constraints file.
+# Airflow providers, pinned by Airflow's own tested constraints file, except for the few pins in
+# constraint-overrides.txt (each fixes a published vulnerability). The overridden packages are
+# also installed by name, so pip replaces the versions the base image already has.
 USER airflow
-COPY requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir \
+COPY --chown=airflow:0 requirements.txt constraint-overrides.txt /tmp/
+RUN curl -fsSL -o /tmp/constraints.txt \
+      "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt" \
+    && grep -vE '^[[:space:]]*(#|$)' /tmp/constraint-overrides.txt > /tmp/overrides.txt \
+    && cut -d= -f1 /tmp/overrides.txt | while read -r name; do sed -i "/^${name}==/Id" /tmp/constraints.txt; done \
+    && cat /tmp/overrides.txt >> /tmp/constraints.txt \
+    && pip install --no-cache-dir \
       "apache-airflow==${AIRFLOW_VERSION}" \
       -r /tmp/requirements.txt \
-      --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt"
+      -r /tmp/overrides.txt \
+      --constraint /tmp/constraints.txt \
+    && rm /tmp/requirements.txt /tmp/constraint-overrides.txt /tmp/overrides.txt /tmp/constraints.txt
