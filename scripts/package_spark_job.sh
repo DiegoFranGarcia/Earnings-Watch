@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Package the Spark job and upload it to s3://<bucket>/artifacts/spark/<git commit>/.
+# Package the Spark job and upload it to s3://<bucket>/artifacts/spark/<commit>/, where <commit> is
+# the last commit that changed spark/. Skips the upload if that commit's code is already there.
 #
 # Every upload is named after the commit it was built from, so any EMR run can be traced
 # to its exact code. Refuses to package uncommitted changes, for the same reason.
@@ -15,7 +16,12 @@ if [[ -n "$(git status --porcelain -- spark)" ]]; then
   exit 1
 fi
 
-sha="$(git rev-parse --short=12 HEAD)"
+sha="$(git log -1 --format=%H -- spark | cut -c1-12)"
+if [[ "${bucket}" != "--local-only" ]] \
+    && [[ -n "$(aws s3 ls "s3://${bucket}/artifacts/spark/${sha}/" 2>/dev/null)" ]]; then
+  echo "${sha}"
+  exit 0
+fi
 out="build/spark/${sha}"
 rm -rf "${out}"
 mkdir -p "${out}"

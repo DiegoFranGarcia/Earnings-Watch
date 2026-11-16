@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Build the production Airflow image for the current commit and push it to ECR, tagged with the
-# commit. Prints the image (repository:commit) on its last line.
+# Build the production Airflow image and push it to ECR, tagged with the last commit that changed
+# anything the image contains (airflow/, dbt/, deploy/). A commit that changes none of them
+# reuses the existing image. Prints the image (repository:commit) on its last line.
 #
 #   scripts/build_airflow_image.sh <ecr-repository-url>
 #
@@ -16,7 +17,7 @@ if [ -n "$(git status --porcelain -- airflow dbt deploy)" ]; then
   exit 1
 fi
 
-commit="$(git rev-parse --short=12 HEAD)"
+commit="$(git log -1 --format=%H -- airflow dbt deploy | cut -c1-12)"
 image="$repository:$commit"
 registry="${repository%%/*}"
 name="${repository#*/}"

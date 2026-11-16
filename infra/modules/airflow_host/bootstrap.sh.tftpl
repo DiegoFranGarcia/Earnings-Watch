@@ -164,22 +164,32 @@ START
 
 cat > /usr/local/bin/earningswatch-deploy <<'DEPLOY'
 #!/bin/bash
-# Deploy the current release now: restart, which fetches and starts it. Succeeds only if the host
-# ends up running exactly the release published at RELEASE_URI; a rolled-back start is a failure.
+# Deploy the current release now: restart, which fetches and starts it. Does nothing if the host
+# already runs exactly that release (image and Spark code). Succeeds only if the host ends up
+# running the release published at RELEASE_URI; a rolled-back start is a failure.
 set -euo pipefail
 source /opt/earningswatch/settings.env
-expected=$(aws s3 cp --only-show-errors "$RELEASE_URI" - | sed -n 's/^AIRFLOW_IMAGE=//p' | head -1)
-if [ -z "$expected" ]; then
+published=$(aws s3 cp --only-show-errors "$RELEASE_URI" -)
+expected_image=$(echo "$published" | sed -n 's/^AIRFLOW_IMAGE=//p' | head -1)
+expected_spark=$(echo "$published" | sed -n 's/^SPARK_CODE_URI=//p' | head -1)
+if [ -z "$expected_image" ]; then
   echo "no release published at $RELEASE_URI" >&2
   exit 1
 fi
-systemctl restart earningswatch.service || true
 source /opt/earningswatch/release.env
-if [ "$(systemctl is-active earningswatch)" = active ] && [ "$AIRFLOW_IMAGE" = "$expected" ]; then
-  echo "deployed $expected"
+if [ "$(systemctl is-active earningswatch)" = active ] \
+    && [ "$AIRFLOW_IMAGE" = "$expected_image" ] && [ "$SPARK_CODE_URI" = "$expected_spark" ]; then
+  echo "already running $expected_image; nothing to deploy"
   exit 0
 fi
-echo "deploy of $expected failed: the host is running $AIRFLOW_IMAGE" >&2
+systemctl restart earningswatch.service || true
+source /opt/earningswatch/release.env
+if [ "$(systemctl is-active earningswatch)" = active ] \
+    && [ "$AIRFLOW_IMAGE" = "$expected_image" ] && [ "$SPARK_CODE_URI" = "$expected_spark" ]; then
+  echo "deployed $expected_image"
+  exit 0
+fi
+echo "deploy of $expected_image failed: the host is running $AIRFLOW_IMAGE" >&2
 exit 1
 DEPLOY
 

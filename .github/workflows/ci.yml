@@ -5,14 +5,15 @@ on:
     branches: [main]
   pull_request:
 
-# Least privilege: this workflow only needs to read the code.
+# Least privilege: the workflow reads the code; only the release job asks for more.
 permissions:
   contents: read
 
-# A newer push cancels a still-running check of an older one.
+# A newer push cancels a still-running check of an older pull request. Runs on main are never
+# cancelled: a release stopped halfway would leave published artifacts without a release.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   lint-and-test:
@@ -41,9 +42,9 @@ jobs:
         run: uv run pytest -v
 
   dag-tests:
-    # The DAG tests need Airflow, its providers and Cosmos: they run inside the real image,
-    # which this job also builds, so a broken requirements.txt fails here, not on a laptop.
-    runs-on: ubuntu-24.04
+    # The DAG tests need Airflow, its providers and Cosmos: they run inside the real image, built
+    # here on arm64, the host's architecture, so a broken requirements.txt fails here.
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -53,3 +54,94 @@ jobs:
 
       - name: DAG integrity tests, inside the image
         run: scripts/test_dags.sh earnings-watch-airflow:ci
+
+  release:
+    # On main, once every check passes: build and publish a release, then deploy it if the host is
+    # awake. A stopped host starts the current release at its next start (05:45 UTC).
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [lint-and-test, dag-tests]
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    environment: production  # only main may use it; the AWS deploy role trusts nothing else
+    permissions:
+      contents: read
+      id-token: write  # lets the job ask GitHub for its signed OIDC token
+    concurrency:
+      group: release-production
+      cancel-in-progress: false  # releases run one at a time, each to completion
+    env:
+      LAKE_BUCKET: ${{ vars.LAKE_BUCKET }}
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0  # artifacts are named after the last commit that changed them
+
+      - name: AWS CLI (the runner's own, or a pinned and verified install)
+        run: |
+          if aws --version 2>/dev/null; then exit 0; fi
+          curl -fsSL -o /tmp/awscli.zip https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.39.3.zip
+          echo "f6eb845fbacb11bee87de3f5fbe8043773cbe89d0414607b44b71e216eb9226b  /tmp/awscli.zip" | sha256sum -c -
+          unzip -q /tmp/awscli.zip -d /tmp && sudo /tmp/aws/install && aws --version
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd  # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Image (built only if this commit changed it)
+        id: image
+        run: |
+          image="$(scripts/build_airflow_image.sh "$ECR_REPOSITORY" | tail -1)"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "commit=${image##*:}" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test the image (every service healthy, every DAG imported)
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          docker pull --quiet "$IMAGE" >/dev/null
+          scripts/smoke_test_prod_stack.sh "$IMAGE"
+
+      - name: Spark code (uploaded only if this commit changed it)
+        id: spark
+        run: echo "commit=$(scripts/package_spark_job.sh "$LAKE_BUCKET" | tail -1)" >> "$GITHUB_OUTPUT"
+
+      - name: dbt manifest, for slim CI on pull requests
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+          COMMIT: ${{ steps.image.outputs.commit }}
+        run: |
+          docker run --rm --entrypoint cat "$IMAGE" /opt/airflow/dbt/target/manifest.json > manifest.json
+          aws s3 cp --only-show-errors manifest.json "s3://$LAKE_BUCKET/artifacts/dbt/$COMMIT/manifest.json"
+
+      - name: Publish the release
+        env:
+          COMMIT: ${{ steps.image.outputs.commit }}
+          SPARK: ${{ steps.spark.outputs.commit }}
+        run: scripts/publish_release.sh "$COMMIT" "$SPARK"
+
+      - name: Deploy, if the host is running
+        id: deploy
+        run: scripts/deploy_release.sh 2>&1 | tee deploy.log
+
+      - name: Summary
+        if: always()
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+          SPARK: ${{ steps.spark.outputs.commit }}
+          DEPLOY: ${{ steps.deploy.outcome }}
+        run: |
+          {
+            echo "### Release ${IMAGE##*:}"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Image | \`$IMAGE\` |"
+            echo "| Spark code | \`s3://$LAKE_BUCKET/artifacts/spark/$SPARK\` |"
+            echo "| Deploy | $DEPLOY |"
+            echo
+            echo '```'
+            tail -5 deploy.log 2>/dev/null || echo "(no deploy)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
