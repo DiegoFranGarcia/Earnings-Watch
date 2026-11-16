@@ -31,6 +31,8 @@ DBT_SNOWFLAKE_PRIVATE_KEY_PATH=/opt/airflow/keys/svc_dbt_rsa_key.p8
 EARNINGSWATCH_HOME=/opt/earningswatch
 KEYS_DIR=/run/earningswatch/keys
 ENV_FILE_PATH=/run/earningswatch/airflow.env
+RELEASE_URI=s3://${lake_bucket}/artifacts/releases/current.env
+ECR_REPOSITORY=${ecr_repository_url}
 SETTINGS
 
 # The current release: changed by earningswatch-deploy, read on every start.
@@ -41,16 +43,95 @@ RELEASE
 
 cat > /usr/local/bin/earningswatch-start <<'START'
 #!/bin/bash
-# Start (or restart) Airflow with the current release: secrets from Secrets Manager into memory,
-# the image from ECR, and the Compose file from inside that image, so they always match.
+# Start (or restart) Airflow with the current release.
+#
+# 1. Secrets from Secrets Manager into memory (/run): never written to disk.
+# 2. The release (image and Spark code) from S3, published by CI on every merge to main. It is
+#    parsed, never executed, and accepted only if the image is this host's own registry and the
+#    Spark code is in this lake. If S3 cannot be read, the last release started here is used.
+# 3. The Compose file from inside the image, so image and Compose file always match.
+# 4. If the release fails to start, the last release that did is started instead, and Discord is
+#    told. A deploy then fails too: the host is not running the current release.
 set -euo pipefail
 home=/opt/earningswatch
 run=/run/earningswatch
-source "$home/release.env"
+source "$home/settings.env"
 
 secret() {
   aws secretsmanager get-secret-value --region us-east-1 \
     --secret-id "earningswatch/${env}/$1" --query SecretString --output text
+}
+
+# Best effort: a failed alert must never stop a start. The URL comes from Secrets Manager, so an
+# alert works at any point, even before airflow.env is written.
+alert() {
+  echo "$1" >&2
+  local url
+  url=$(secret discord-webhook-url 2>/dev/null || true)
+  if [ -n "$url" ]; then
+    python3 -c 'import json, sys; print(json.dumps({"content": sys.argv[1]}))' "$1" \
+      | curl -fsS -m 10 -H 'Content-Type: application/json' -d @- "$url" >/dev/null || true
+  fi
+}
+
+# Read a release file without executing it; print "image spark" if both values are acceptable.
+parse_release() {
+  local image spark tag
+  image=$(sed -n 's/^AIRFLOW_IMAGE=//p' "$1" | head -1)
+  spark=$(sed -n 's/^SPARK_CODE_URI=//p' "$1" | head -1)
+  tag=$(echo "$image" | sed "s|^$ECR_REPOSITORY:||")
+  if [[ ! "$tag" =~ ^[0-9a-f]{12}$ ]] || [ "$image" != "$ECR_REPOSITORY:$tag" ]; then
+    echo "not this host's registry, or not a commit tag: $image" >&2
+    return 1
+  fi
+  tag=$(echo "$spark" | sed "s|^s3://$LAKE_BUCKET/artifacts/spark/||")
+  if [[ ! "$tag" =~ ^[0-9a-f]{12}$ ]] || [ "$spark" != "s3://$LAKE_BUCKET/artifacts/spark/$tag" ]; then
+    echo "not this lake's Spark code: $spark" >&2
+    return 1
+  fi
+  echo "$image $spark"
+}
+
+write_release() {
+  printf 'AIRFLOW_IMAGE=%s\nSPARK_CODE_URI=%s\n' "$1" "$2" > "$home/release.env.new"
+  mv "$home/release.env.new" "$home/release.env"
+}
+
+# The release CI published, if it can be read and is acceptable; otherwise the current one stays.
+fetch_release() {
+  local file values
+  file=$(mktemp)
+  if ! aws s3 cp --only-show-errors "$RELEASE_URI" "$file" 2>/dev/null; then
+    echo "could not read $RELEASE_URI; keeping the last release" >&2
+  elif values=$(parse_release "$file"); then
+    write_release $values # two words: the image and the Spark code
+  else
+    alert "⚠️ Airflow host: ignored an invalid release at $RELEASE_URI"
+  fi
+  rm -f "$file"
+}
+
+write_env() {
+  {
+    cat "$home/settings.env"
+    echo "AIRFLOW_IMAGE=$AIRFLOW_IMAGE"
+    echo "SPARK_CODE_URI=$SPARK_CODE_URI"
+    echo "DISCORD_WEBHOOK_URL=$(secret discord-webhook-url)"
+    secret airflow-internals \
+      | python3 -c 'import json, sys; [print(k + "=" + v) for k, v in json.load(sys.stdin).items()]'
+  } > "$run/airflow.env"
+}
+
+start_release() {
+  source "$home/release.env"
+  write_env
+  aws ecr get-login-password --region us-east-1 \
+    | docker login --username AWS --password-stdin "$(echo "$ECR_REPOSITORY" | cut -d/ -f1)"
+  docker pull --quiet "$AIRFLOW_IMAGE"
+  docker run --rm --entrypoint cat "$AIRFLOW_IMAGE" /opt/airflow/deploy/compose.yaml \
+    > "$home/deploy/compose.yaml"
+  docker compose -p earningswatch -f "$home/deploy/compose.yaml" --env-file "$run/airflow.env" \
+    up -d --remove-orphans --wait --wait-timeout 600
 }
 
 # /run is in memory: nothing below is ever written to disk.
@@ -61,52 +142,45 @@ secret svc-airflow-private-key > "$run/keys/svc_airflow_rsa_key.p8"
 secret svc-dbt-private-key > "$run/keys/svc_dbt_rsa_key.p8"
 chown 50000:0 "$run"/keys/*.p8
 chmod 0400 "$run"/keys/*.p8
-{
-  cat "$home/settings.env"
-  echo "AIRFLOW_IMAGE=$AIRFLOW_IMAGE"
-  echo "SPARK_CODE_URI=$SPARK_CODE_URI"
-  echo "DISCORD_WEBHOOK_URL=$(secret discord-webhook-url)"
-  secret airflow-internals \
-    | python3 -c 'import json, sys; [print(k + "=" + v) for k, v in json.load(sys.stdin).items()]'
-} > "$run/airflow.env"
 
-registry=$(echo "$AIRFLOW_IMAGE" | cut -d/ -f1)
-aws ecr get-login-password --region us-east-1 \
-  | docker login --username AWS --password-stdin "$registry"
-docker pull --quiet "$AIRFLOW_IMAGE"
-docker run --rm --entrypoint cat "$AIRFLOW_IMAGE" /opt/airflow/deploy/compose.yaml \
-  > "$home/deploy/compose.yaml"
-docker compose -p earningswatch -f "$home/deploy/compose.yaml" --env-file "$run/airflow.env" \
-  up -d --remove-orphans --wait --wait-timeout 600
-echo "running $AIRFLOW_IMAGE"
+fetch_release
+if start_release; then
+  cp "$home/release.env" "$home/release.good"
+  echo "running $AIRFLOW_IMAGE"
+  exit 0
+fi
+
+failed=$AIRFLOW_IMAGE
+if [ -f "$home/release.good" ] && ! cmp -s "$home/release.env" "$home/release.good"; then
+  cp "$home/release.good" "$home/release.env"
+  if start_release; then
+    alert "⚠️ Airflow host: $failed failed to start; rolled back to $AIRFLOW_IMAGE"
+    exit 0
+  fi
+fi
+alert "❌ Airflow host: could not start $failed, and no earlier release started either"
+exit 1
 START
 
 cat > /usr/local/bin/earningswatch-deploy <<'DEPLOY'
 #!/bin/bash
-# Deploy an image, and optionally new Spark code: record it as the current release and restart.
-# If the new release fails to start, roll back to the previous one and report the failure.
-#   earningswatch-deploy <repository:commit> [s3://.../artifacts/spark/<commit>]
+# Deploy the current release now: restart, which fetches and starts it. Succeeds only if the host
+# ends up running exactly the release published at RELEASE_URI; a rolled-back start is a failure.
 set -euo pipefail
-release=/opt/earningswatch/release.env
-if [ $# -lt 1 ]; then
-  echo "usage: earningswatch-deploy <image> [spark_code_uri]" >&2
-  exit 2
-fi
-source "$release"
-spark="$SPARK_CODE_URI"
-if [ $# -ge 2 ]; then spark="$2"; fi
-
-cp "$release" "$release.previous"
-printf 'AIRFLOW_IMAGE=%s\nSPARK_CODE_URI=%s\n' "$1" "$spark" > "$release.new"
-mv "$release.new" "$release"
-# Through systemd, so the service's state always reflects what is running.
-if ! systemctl restart earningswatch.service; then
-  echo "deploy of $1 failed; rolling back" >&2
-  mv "$release.previous" "$release"
-  systemctl restart earningswatch.service
+source /opt/earningswatch/settings.env
+expected=$(aws s3 cp --only-show-errors "$RELEASE_URI" - | sed -n 's/^AIRFLOW_IMAGE=//p' | head -1)
+if [ -z "$expected" ]; then
+  echo "no release published at $RELEASE_URI" >&2
   exit 1
 fi
-echo "deployed $1"
+systemctl restart earningswatch.service || true
+source /opt/earningswatch/release.env
+if [ "$(systemctl is-active earningswatch)" = active ] && [ "$AIRFLOW_IMAGE" = "$expected" ]; then
+  echo "deployed $expected"
+  exit 0
+fi
+echo "deploy of $expected failed: the host is running $AIRFLOW_IMAGE" >&2
+exit 1
 DEPLOY
 
 cat > /usr/local/bin/earningswatch-backup <<'BACKUP'

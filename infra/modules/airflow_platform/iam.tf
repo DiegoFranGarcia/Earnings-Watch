@@ -71,6 +71,13 @@ data "aws_iam_policy_document" "host" {
     resources = [for secret in aws_secretsmanager_secret.host : secret.arn]
   }
 
+  # One object: the release CI publishes. The host cannot list releases or read their history.
+  statement {
+    sid       = "ReadTheCurrentRelease"
+    actions   = ["s3:GetObject"]
+    resources = ["${var.lake_bucket_arn}/artifacts/releases/current.env"]
+  }
+
   statement {
     sid       = "LogInToEcr"
     actions   = ["ecr:GetAuthorizationToken"]

@@ -27,6 +27,7 @@ resource "aws_instance" "airflow" {
     snowflake_database = var.snowflake_database
     compose_version    = var.compose_version
     compose_sha256     = var.compose_sha256
+    ecr_repository_url = var.ecr_repository_url
   })
 
   metadata_options {

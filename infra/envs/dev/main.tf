@@ -37,6 +37,7 @@ module "airflow_host" {
   snowflake_account     = "${var.snowflake_organization_name}-${var.snowflake_account_name}"
   snowflake_database    = "EARNINGSWATCH_DEV"
   alerts_topic_arn      = module.airflow_platform.alerts_topic_arn
+  ecr_repository_url    = module.airflow_platform.ecr_repository_url
 }
 
 module "github_oidc" {

@@ -83,3 +83,8 @@ variable "stop_cron" {
   type        = string
   default     = "cron(45 9 * * ? *)"
 }
+
+variable "ecr_repository_url" {
+  description = "The only registry the host accepts images from, in a release."
+  type        = string
+}
