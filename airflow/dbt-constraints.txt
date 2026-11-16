@@ -1,7 +1,8 @@
 # Exact versions for dbt's virtual environment in the Airflow image. Generated, not edited:
 #   uv pip compile airflow/dbt-requirements.txt --python-version 3.12 \
-#     --python-platform aarch64-unknown-linux-gnu --exclude-newer <today minus 14 days>
-# so every version is over two weeks old by construction. Regenerate to update; then rebuild, test.
+#     --python-platform aarch64-unknown-linux-gnu --exclude-newer <today minus 15 days>
+# so every version is over two weeks old (15 days leaves a margin for time zones).
+# Regenerate to update; then rebuild and test.
 agate==1.9.1
 annotated-types==0.8.0
 asn1crypto==1.5.1
@@ -24,7 +25,7 @@ dbt-extractor==0.6.0
 dbt-protos==1.0.615
 dbt-snowflake==1.12.4
 deepdiff==8.6.2
-filelock==4.2.7
+filelock==4.2.6
 idna==3.20
 importlib-metadata==10.1.0
 isodate==0.7.2
