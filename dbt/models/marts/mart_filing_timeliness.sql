@@ -1,3 +1,4 @@
+-- Filing timeliness by filer status, form and year: its grain and tests are declared in YAML.
 -- One row per filer status, form and period year: how many 10-K or 10-Q filings were on time,
 -- within a late-filing notice's extension, or late, and how long filers took. Notices are
 -- known only from 2025 (notice_data_available), so earlier years count extensions as late.
