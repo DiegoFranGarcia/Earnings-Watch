@@ -12,6 +12,11 @@
 # connects to Snowflake, AWS or the SEC, so the image is tested just as well, with no real secret.
 set -euo pipefail
 
+# Nothing here reads the caller's standard input. Closing it means a command that forwards
+# input (docker compose exec does) can never swallow the rest of a script that runs this one
+# from a pipe or heredoc. Commands that need input get it from an explicit < redirect.
+exec </dev/null
+
 image="${1:?usage: scripts/smoke_test_prod_stack.sh <image>}"
 throwaway="${SMOKE_TEST_THROWAWAY:-0}"
 expected_dags="company_tickers_snapshot dbt_build sec_daily_index sec_fsds_quarterly snowflake_load snowflake_load_daily_index"
@@ -22,6 +27,11 @@ home="$(mktemp -d)"
 # containers write logs as their own user (50000), which a Linux runner cannot delete, so those are
 # removed from inside a container running as root, using the image that is already here.
 cleanup() {
+  if [ "${SMOKE_TEST_KEEP:-0}" = 1 ]; then  # for debugging: leave the stack running to inspect
+    echo "keeping the ew-smoke stack; remove it with:" >&2
+    echo "  docker compose -p ew-smoke -f deploy/compose.yaml --env-file $home/airflow.env down -v" >&2
+    return
+  fi
   docker compose -p ew-smoke -f deploy/compose.yaml --env-file "$home/airflow.env" down -v >/dev/null 2>&1 || true
   if ! rm -rf "$home" 2>/dev/null; then
     docker run --rm --user 0 --entrypoint rm -v "$home:/cleanup" "$image" -rf /cleanup/logs >/dev/null 2>&1 || true
@@ -80,23 +90,96 @@ compose=(docker compose -p ew-smoke -f deploy/compose.yaml --env-file "$home/air
 failures=0
 fail() { echo "FAIL: $1" >&2; failures=$((failures + 1)); }
 
+# The last top-level JSON array in a command's output. Airflow's CLI can print warnings before its
+# data (the slim image warns that graphviz is missing), so its tables cannot be trusted to parse.
+# An array that decodes is skipped over whole: arrays nested inside it ("roles": [...]) are part
+# of it, never candidates themselves.
+json_array() {
+  python3 -c '
+import json, sys
+text, decoder, found, i = sys.stdin.read(), json.JSONDecoder(), [], 0
+while i < len(text):
+    if text[i] != "[":
+        i += 1
+        continue
+    try:
+        value, end = decoder.raw_decode(text, i)
+    except ValueError:
+        i += 1
+        continue
+    if isinstance(value, list):
+        found = value
+    i = end
+print(json.dumps(found))'
+}
+
 echo "starting the production stack from $image ($([ "$throwaway" = 1 ] && echo throwaway || echo real) configuration) ..."
+started=$SECONDS
 if ! "${compose[@]}" up -d --wait --wait-timeout 300 >/dev/null; then
-  "${compose[@]}" ps --format '{{.Service}}: {{.Status}}' >&2
+  echo "after $((SECONDS - started)) seconds:" >&2
+  "${compose[@]}" ps -a --format '{{.Service}}: {{.Status}}' >&2
+  # The evidence, before cleanup removes it: the logs of every service that exited or is unhealthy.
+  for service in $("${compose[@]}" ps -a --format '{{.Service}} {{.Status}}' \
+      | awk '/Exited \([1-9]|unhealthy|Restarting|starting/ {print $1}'); do
+    echo "--- the last 40 lines of $service:" >&2
+    "${compose[@]}" logs --no-color --tail 40 "$service" >&2 || true
+  done
   echo "FAIL: the stack did not become healthy" >&2
   exit 1
 fi
+echo "healthy after $((SECONDS - started)) seconds"
 "${compose[@]}" ps --format '{{.Service}}: {{.Status}}'
 
-echo "--- import errors:"
-errors="$("${compose[@]}" exec -T airflow-scheduler airflow dags list-import-errors -o plain 2>/dev/null || true)"
-echo "$errors"
-if echo "$errors" | grep -q '\.py'; then fail "a DAG file failed to import"; fi
+echo "--- the DAG folder, parsed inside the image as the DAG processor does:"
+parsed="$("${compose[@]}" exec -T airflow-scheduler python - < scripts/parse_dags.py 2>/dev/null \
+  | sed -n 's/^PARSE_RESULT //p' | tail -1 || true)"
+if [ -z "$parsed" ]; then
+  fail "the DAG folder could not be parsed"
+else
+  dags="$(echo "$parsed" | python3 -c 'import json, sys; print(" ".join(json.load(sys.stdin)["dags"]))')"
+  errors="$(echo "$parsed" | python3 -c 'import json, sys; [print(f"  {f}: {e}") for f, e in json.load(sys.stdin)["errors"].items()]')"
+  echo "DAGs: $dags"
+  if [ -n "$errors" ]; then echo "$errors"; fail "a DAG file failed to import"; fi
+  if [ "$dags" != "$expected_dags" ]; then fail "expected exactly: $expected_dags"; fi
+fi
 
-echo "--- DAGs:"
-dags="$("${compose[@]}" exec -T airflow-scheduler airflow dags list -o plain 2>/dev/null | awk 'NR > 1 {print $1}' | sort -u | tr '\n' ' ' | sed 's/ $//')"
-echo "$dags"
-if [ "$dags" != "$expected_dags" ]; then fail "expected exactly: $expected_dags"; fi
+echo "--- the same DAGs, registered by the running DAG processor (it parses in the background):"
+registered=""; raw=""
+for attempt in $(seq 1 24); do
+  raw="$("${compose[@]}" exec -T airflow-scheduler airflow dags list -o json 2>&1 || true)"
+  registered="$(echo "$raw" | json_array \
+    | python3 -c 'import json, sys; print(" ".join(sorted({d["dag_id"] for d in json.load(sys.stdin)})))' || true)"
+  [ "$registered" = "$expected_dags" ] && break
+  sleep 5
+done
+echo "registered: ${registered:-(none)} (attempt $attempt of 24)"
+if [ "$registered" != "$expected_dags" ]; then
+  echo "the last attempt's output:" >&2
+  echo "$raw" | grep -vi openlineage | tail -8 >&2
+  fail "the DAG processor did not register exactly the six DAGs within two minutes"
+fi
+
+echo "--- the admin user (created by airflow-init; without it, nobody can log in to the UI):"
+# Retried: right after the stack reports healthy, the API server is still rewriting the FAB
+# permission tables, and a read can fail while the user exists. The attempt count shows if so.
+users=""; raw=""
+for attempt in 1 2 3 4 5 6; do
+  raw="$("${compose[@]}" exec -T airflow-scheduler airflow users list -o json 2>&1 || true)"
+  users="$(echo "$raw" | json_array \
+    | python3 -c 'import json, sys; print(" ".join(sorted(u["username"] for u in json.load(sys.stdin))))' || true)"
+  [[ " $users " == *" admin "* ]] && break
+  sleep 5
+done
+echo "users: ${users:-(none)} (attempt $attempt of 6)"
+if [[ " $users " != *" admin "* ]]; then
+  echo "the last attempt's output:" >&2
+  echo "$raw" | grep -vi openlineage | tail -8 >&2
+  fail "the admin user was not created"
+fi
+
+echo "--- every module the DAG code can import, top-level and inside functions:"
+"${compose[@]}" exec -T airflow-scheduler python - < scripts/check_dag_imports.py \
+  || fail "a module the DAG code imports is missing from the image"
 
 echo "--- baked in: the dbt manifest and the earningswatch package"
 "${compose[@]}" exec -T airflow-scheduler bash -c \

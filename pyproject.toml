@@ -14,13 +14,13 @@ dev = [
     "ruff==0.17.1",
     "pre-commit>=4.7,<5",
     "sqlfluff==4.4.0",
-    # Same versions as the Airflow 3.3.1 constraints, so tests behave like the containers.
+    # Same versions as the Airflow 3.3.2 constraints, so tests behave like the containers.
     "requests==2.34.2",
     "urllib3==2.8.0",  # airflow/constraint-overrides.txt
     "certifi==2026.10.23",  # airflow/constraint-overrides.txt
     "responses==0.26.3",
-    "boto3==1.43.56",
-    "botocore[crt]==1.43.56",  # [crt] adds awscrt, which `aws login` credentials need
+    "boto3==1.43.75",
+    "botocore[crt]==1.43.75",  # [crt] adds awscrt, which `aws login` credentials need
     "moto[s3]==5.2.4",
     # The thin slice: local analytics and the single-node baseline Spark is benchmarked against.
     "duckdb==1.5.6",
@@ -30,7 +30,7 @@ dev = [
     # The slice's dashboard.
     "streamlit==1.65.0",
     "pyspark==4.0.2",
-    "snowflake-connector-python==4.7.3",  # airflow/constraint-overrides.txt
+    "snowflake-connector-python==4.7.3",
 ]
 
 [tool.uv]

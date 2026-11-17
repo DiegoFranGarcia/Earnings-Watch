@@ -47,19 +47,29 @@ jobs:
           REQUIRE_SPARK_TESTS: "1"  # fail, never skip, if Java is missing
         run: uv run pytest -v
 
-  dag-tests:
-    # The DAG tests need Airflow, its providers and Cosmos: they run inside the real image, built
-    # here on arm64, the host's architecture, so a broken requirements.txt fails here.
+  image-tests:
+    # Both images, tested as they will run, on every push and pull request: the DAG integrity tests
+    # in the base image, then the production image's smoke test (every service healthy, every DAG
+    # imported, every module the DAG code can import present). Built on arm64, the host's
+    # architecture. Nothing is pushed: the release job builds and pushes on main.
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      - name: Build the Airflow image
-        run: docker build -t earnings-watch-airflow:ci airflow
+      - name: Build the base and production images
+        run: |
+          docker build -t earnings-watch-airflow:ci airflow
+          docker build -f airflow/Dockerfile.prod --build-arg BASE_IMAGE=earnings-watch-airflow:ci \
+            -t earnings-watch-airflow:ci-prod .
 
-      - name: DAG integrity tests, inside the image
+      - name: DAG integrity tests, inside the base image
         run: scripts/test_dags.sh earnings-watch-airflow:ci
+
+      - name: Smoke test the production image
+        env:
+          SMOKE_TEST_THROWAWAY: "1"  # generated keys and secrets: CI never holds a real one
+        run: scripts/smoke_test_prod_stack.sh earnings-watch-airflow:ci-prod
 
   dbt-slim-ci:
     # Pull requests: build the dbt models the pull request changed, and everything downstream, in
@@ -153,7 +163,7 @@ jobs:
     # On main, once every check passes: build and publish a release, then deploy it if the host is
     # awake. A stopped host starts the current release at its next start (05:45 UTC).
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [lint-and-test, dag-tests]
+    needs: [lint-and-test, image-tests]
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
     environment: production  # only main may use it; the AWS deploy role trusts nothing else

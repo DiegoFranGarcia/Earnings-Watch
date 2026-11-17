@@ -6,5 +6,14 @@
 certifi==2026.10.23
 # urllib3: the HTTP library under boto3, requests and the SEC client.
 urllib3==2.8.0
-# snowflake-connector-python: every load and the volume gate connect through it.
-snowflake-connector-python==4.7.3
+# pyjwt: Airflow 3's API signs and checks a JWT on every request.
+pyjwt==2.15.0
+# aiohttp and multidict: the deferrable EMR tasks call AWS asynchronously through aiohttp.
+aiohttp==3.14.4
+multidict==6.9.1
+# werkzeug: the web layer behind the UI's login.
+werkzeug==3.1.9
+# msgpack: Airflow 3's task processes use it to talk to the scheduler.
+msgpack==1.2.3
+# yarl: aiohttp 3.14.4 requires 1.25.1 or newer; Airflow's constraints pin 1.24.5.
+yarl==1.25.1
