@@ -57,6 +57,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
+
       - name: Build the base and production images
         run: |
           docker build -t earnings-watch-airflow:ci airflow
@@ -70,6 +72,51 @@ jobs:
         env:
           SMOKE_TEST_THROWAWAY: "1"  # generated keys and secrets: CI never holds a real one
         run: scripts/smoke_test_prod_stack.sh earnings-watch-airflow:ci-prod
+
+      - name: Known vulnerabilities in the image's Python environments (pip-audit)
+        run: |
+          docker run --rm --entrypoint python earnings-watch-airflow:ci-prod -m pip freeze --all \
+            | grep -v '^-e ' > /tmp/airflow-env.txt
+          docker run --rm --entrypoint /opt/dbt_venv/bin/python earnings-watch-airflow:ci-prod \
+            -m pip freeze --all | grep -v '^-e ' > /tmp/dbt-env.txt
+          scripts/audit_python.sh /tmp/airflow-env.txt "the image's Airflow environment"
+          scripts/audit_python.sh /tmp/dbt-env.txt "the image's dbt environment"
+
+      - name: Operating-system vulnerabilities in the image (Trivy 0.76.1, checksum verified; report only)
+        run: |
+          curl -fsSL -o /tmp/trivy.tgz \
+            https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_Linux-ARM64.tar.gz
+          echo "e174dff2a6dba5e3ae41f8d0537a6324405bd08132497340304c6b20e0f16a1f  /tmp/trivy.tgz" | sha256sum -c -
+          tar -xzf /tmp/trivy.tgz -C /tmp trivy
+          /tmp/trivy image --quiet --scanners vuln --pkg-types os --format json --output /tmp/trivy.json \
+            earnings-watch-airflow:ci-prod
+          python3 scripts/summarize_trivy.py /tmp/trivy.json | tee -a "$GITHUB_STEP_SUMMARY"
+
+  security:
+    # Secrets anywhere in the history (gitleaks), and known vulnerabilities in the project's
+    # lockfile (pip-audit). Both block, except vulnerabilities accepted, by ID and with a reason,
+    # in security/accepted-vulnerabilities.txt. The image's environments are audited in image-tests.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0  # every commit: a secret that was deleted is still in the history
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
+
+      - name: Secrets in the whole history (gitleaks 8.30.1, checksum verified)
+        run: |
+          curl -fsSL -o /tmp/gitleaks.tgz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tgz" | sha256sum -c -
+          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
+          /tmp/gitleaks git --redact --no-banner --log-level warn --verbose .
+
+      - name: Known vulnerabilities in the project's lockfile (pip-audit)
+        run: |
+          uv export --frozen --format requirements-txt --no-hashes --all-groups --no-emit-project \
+            > /tmp/project.txt
+          scripts/audit_python.sh /tmp/project.txt "the project's lockfile"
 
   dbt-slim-ci:
     # Pull requests: build the dbt models the pull request changed, and everything downstream, in
@@ -163,7 +210,7 @@ jobs:
     # On main, once every check passes: build and publish a release, then deploy it if the host is
     # awake. A stopped host starts the current release at its next start (05:45 UTC).
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [lint-and-test, image-tests]
+    needs: [lint-and-test, image-tests, security]
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
     environment: production  # only main may use it; the AWS deploy role trusts nothing else
