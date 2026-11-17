@@ -1,0 +1,39 @@
+name: CI cleanup
+
+# When a pull request closes (merged or not), drop the schemas slim CI built for it.
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  drop-pr-schemas:
+    # Forks never got schemas (slim CI skips them), and never get SVC_CI's key.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      DBT_CI_SCHEMA: PR_${{ github.event.pull_request.number }}
+      DBT_SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/svc_ci_rsa_key.p8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Drop this pull request's schemas
+        working-directory: dbt
+        env:
+          KEY: ${{ secrets.SNOWFLAKE_CI_PRIVATE_KEY }}
+        run: |
+          (umask 077; printf '%s\n' "$KEY" > "$DBT_SNOWFLAKE_PRIVATE_KEY_PATH")
+          trap 'rm -f "$DBT_SNOWFLAKE_PRIVATE_KEY_PATH"' EXIT
+          if [ -f packages.yml ]; then uv run dbt deps --quiet; fi
+          uv run dbt run-operation drop_ci_schemas --target ci --args "{prefix: $DBT_CI_SCHEMA}"

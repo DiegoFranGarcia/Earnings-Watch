@@ -61,6 +61,94 @@ jobs:
       - name: DAG integrity tests, inside the image
         run: scripts/test_dags.sh earnings-watch-airflow:ci
 
+  dbt-slim-ci:
+    # Pull requests: build the dbt models the pull request changed, and everything downstream, in
+    # schemas of its own (PR_<number>_*) in EARNINGSWATCH_CI, reading everything unchanged from
+    # production (--defer). Compared with the dbt manifest of the release production runs.
+    # Pull requests from forks are skipped: a stranger's code never runs with SVC_CI's key.
+    if: >-
+      github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write  # gha-plan (read-only) fetches the production manifest
+    env:
+      LAKE_BUCKET: ${{ vars.LAKE_BUCKET }}
+      DBT_CI_SCHEMA: PR_${{ github.event.pull_request.number }}
+      DBT_SOURCE_DATABASE: EARNINGSWATCH_DEV
+      DBT_SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/svc_ci_rsa_key.p8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd  # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: The production manifest (the current release's)
+        run: |
+          release="$(aws s3 cp --only-show-errors "s3://$LAKE_BUCKET/artifacts/releases/current.env" - \
+            | sed -n 's/^AIRFLOW_IMAGE=.*://p')"
+          [[ "$release" =~ ^[0-9a-f]{12}$ ]] || { echo "no current release to compare with" >&2; exit 1; }
+          mkdir -p prod-state
+          aws s3 cp --only-show-errors "s3://$LAKE_BUCKET/artifacts/dbt/$release/manifest.json" \
+            prod-state/manifest.json
+          echo "comparing with release $release"
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: What this pull request changes
+        id: changes
+        working-directory: dbt
+        run: |
+          if [ -f packages.yml ]; then uv run dbt deps --quiet; fi
+          uv run dbt ls --target ci --select "state:modified+" --state ../prod-state --quiet \
+            > ../changed.txt
+          echo "count=$(wc -l < ../changed.txt | tr -d ' ')" >> "$GITHUB_OUTPUT"
+          echo "$(wc -l < ../changed.txt | tr -d ' ') dbt node(s) to build and test:"
+          cat ../changed.txt
+
+      - name: SVC_CI's key
+        if: steps.changes.outputs.count != '0'
+        env:
+          KEY: ${{ secrets.SNOWFLAKE_CI_PRIVATE_KEY }}
+        run: |
+          [ -n "$KEY" ] || { echo "the SNOWFLAKE_CI_PRIVATE_KEY secret is not set" >&2; exit 1; }
+          (umask 077; printf '%s\n' "$KEY" > "$DBT_SNOWFLAKE_PRIVATE_KEY_PATH")
+
+      - name: Build and test the changes, in PR schemas
+        if: steps.changes.outputs.count != '0'
+        working-directory: dbt
+        run: |
+          uv run dbt build --target ci --select "state:modified+" --defer --state ../prod-state \
+            2>&1 | tee ../build.log
+
+      - name: Summary
+        if: always()
+        env:
+          COUNT: ${{ steps.changes.outputs.count }}
+        run: |
+          {
+            echo "### dbt slim CI: $DBT_CI_SCHEMA"
+            if [ "${COUNT:-}" = "0" ]; then
+              echo "No dbt changes: nothing to build."
+            else
+              echo "Built and tested ${COUNT:-?} node(s) in \`EARNINGSWATCH_CI.${DBT_CI_SCHEMA}_*\`."
+              echo
+              echo '```'
+              grep -E "Done\. PASS=|ERROR|FAIL" build.log 2>/dev/null | tail -10 || echo "(no build log)"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove SVC_CI's key
+        if: always()
+        run: rm -f "$DBT_SNOWFLAKE_PRIVATE_KEY_PATH"
+
   release:
     # On main, once every check passes: build and publish a release, then deploy it if the host is
     # awake. A stopped host starts the current release at its next start (05:45 UTC).
