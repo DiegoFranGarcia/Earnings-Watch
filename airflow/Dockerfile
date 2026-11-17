@@ -1,9 +1,11 @@
 # EarningsWatch Airflow image.
 # Change AIRFLOW_VERSION here only; the constraints file follows it automatically.
-ARG AIRFLOW_VERSION=3.3.1
+ARG AIRFLOW_VERSION=3.3.2
 ARG PYTHON_VERSION=3.12
 
-FROM apache/airflow:${AIRFLOW_VERSION}-python${PYTHON_VERSION}
+# The slim image: Airflow and almost no providers. requirements.txt installs exactly what the
+# pipeline uses; the full image preinstalled ~30 providers, and every one was attack surface.
+FROM apache/airflow:slim-${AIRFLOW_VERSION}-python${PYTHON_VERSION}
 ARG AIRFLOW_VERSION
 ARG PYTHON_VERSION
 

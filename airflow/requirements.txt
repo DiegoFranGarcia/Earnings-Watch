@@ -1,6 +1,17 @@
-# Versions come from the Airflow constraints file in the Dockerfile.
+# Versions come from the Airflow constraints file in the Dockerfile. The image starts from Airflow's
+# slim image, so this is everything the pipeline uses beyond Airflow itself, and nothing else.
+# scripts/check_dag_imports.py proves every module the DAG code imports is present.
+
+# EMR Serverless (the Spark jobs), S3, and the task logs Airflow writes to S3.
 apache-airflow-providers-amazon
-apache-airflow-providers-snowflake
+# The UI's login: deploy/compose.yaml sets AIRFLOW__CORE__AUTH_MANAGER to the FAB auth manager.
+apache-airflow-providers-fab
+# Airflow's own metadata database is Postgres (AIRFLOW__DATABASE__SQL_ALCHEMY_CONN). Airflow's
+# postgres extra is its own definition of what that needs: psycopg2 for the ordinary connection,
+# and asyncpg for the asynchronous one Airflow 3 opens internally (the slim image has neither).
+apache-airflow[postgres]
+# The loads and the volume gate connect to Snowflake with the connector directly (no provider).
+snowflake-connector-python
 # [crt] adds awscrt, which boto3 needs to use `aws login` credentials (local development).
 botocore[crt]
 # Writes silver Parquet inside DAG tasks.
