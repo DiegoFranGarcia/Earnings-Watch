@@ -15,7 +15,7 @@ defaults:
 jobs:
   drop-pr-schemas:
     # Forks never got schemas (slim CI skips them), and never get SVC_CI's key.
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:

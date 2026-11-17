@@ -123,9 +123,11 @@ jobs:
     # schemas of its own (PR_<number>_*) in EARNINGSWATCH_CI, reading everything unchanged from
     # production (--defer). Compared with the dbt manifest of the release production runs.
     # Pull requests from forks are skipped: a stranger's code never runs with SVC_CI's key.
+    # Dependabot's pull requests get no secrets or OIDC token, and never change dbt.
     if: >-
       github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:

@@ -5,9 +5,17 @@ ARG PYTHON_VERSION=3.12
 
 # The slim image: Airflow and almost no providers. requirements.txt installs exactly what the
 # pipeline uses; the full image preinstalled ~30 providers, and every one was attack surface.
-FROM apache/airflow:slim-${AIRFLOW_VERSION}-python${PYTHON_VERSION}
+# Pinned by digest: a tag can be rebuilt under the same name. Dependabot proposes Apache's
+# rebuilds as pull requests (.github/dependabot.yml). An Airflow upgrade changes this line and
+# AIRFLOW_VERSION together; the check below fails the build if they disagree.
+FROM apache/airflow:slim-3.3.2-python3.12@sha256:a54e7bd6c4d7a17e55cd14b0ead257877b8f8111680d2692cbdba2ff32bd3ff3
 ARG AIRFLOW_VERSION
 ARG PYTHON_VERSION
+RUN installed="$(python -c 'import importlib.metadata as m; print(m.version("apache-airflow"))')" \
+    && if [ "$installed" != "$AIRFLOW_VERSION" ]; then \
+      echo "base image check: Airflow $installed in the base image, but AIRFLOW_VERSION is $AIRFLOW_VERSION" >&2; \
+      exit 1; \
+    fi
 
 # dbt in its own virtual environment, so its dependencies never clash with Airflow's.
 USER root

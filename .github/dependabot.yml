@@ -1,0 +1,24 @@
+version: 2
+# Base images are pinned by digest. Dependabot proposes rebuilds of the same version (security
+# fixes) as pull requests, each at least 14 days old, through every check in ci.yml. Version
+# changes stay deliberate: a new Airflow needs new constraints and development pins.
+updates:
+  - package-ecosystem: docker
+    directory: /airflow
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    ignore:
+      - dependency-name: apache/airflow
+        update-types: [version-update:semver-major, version-update:semver-minor, version-update:semver-patch]
+
+  - package-ecosystem: docker-compose
+    directory: /deploy
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    ignore:
+      - dependency-name: postgres
+        update-types: [version-update:semver-major, version-update:semver-minor]
