@@ -17,8 +17,30 @@ RUN installed="$(python -c 'import importlib.metadata as m; print(m.version("apa
       exit 1; \
     fi
 
-# dbt in its own virtual environment, so its dependencies never clash with Airflow's.
 USER root
+
+# Packages nothing in the pipeline runs, removed. Each carried published vulnerabilities, and a
+# tool that is not there cannot be used by an intruder either. Removing downloads nothing, so
+# every build gives the same result. perl takes postgresql-client with it (pg_dump and psql run
+# in the Postgres container), and libexpat1 takes git (no DAG bundle or dbt package uses git).
+# Kept: apt (for a pinned snapshot upgrade, if one is ever needed), curl (the health checks) and
+# perl-base (Essential in Debian). The check stops the build if a new base image would make the
+# purge remove anything else, or has dropped one of these packages: update the list then.
+ARG UNUSED_PACKAGES="apt-utils git libexpat1 liberror-perl libperl5.36 libsasl2-modules mariadb-client mariadb-client-core perl perl-modules-5.36 postgresql-client postgresql-client-18 postgresql-client-common rsync sasl2-bin"
+RUN removing="$(apt-get -s purge ${UNUSED_PACKAGES} | awk '/^Purg/ {print $2}' | sort | tr '\n' ' ')" \
+    && expected="$(printf '%s\n' ${UNUSED_PACKAGES} | sort | tr '\n' ' ')" \
+    && if [ "$removing" != "$expected" ]; then \
+      echo "package check: purging [${expected}] would remove [${removing}]; update UNUSED_PACKAGES" >&2; \
+      exit 1; \
+    fi \
+    && DEBIAN_FRONTEND=noninteractive apt-get purge -y -q ${UNUSED_PACKAGES} \
+    && for package in ${UNUSED_PACKAGES}; do \
+      if dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q ' installed$'; then \
+        echo "package check: $package is still installed" >&2; exit 1; \
+      fi; \
+    done
+
+# dbt in its own virtual environment, so its dependencies never clash with Airflow's.
 # dbt-constraints.txt freezes every library in it, so every build installs the same versions.
 COPY dbt-requirements.txt dbt-constraints.txt /tmp/
 RUN python -m venv /opt/dbt_venv \

@@ -1,0 +1,92 @@
+# Operating-system vulnerabilities this project accepts in its images (Trivy's ignore file).
+# CI fails on any fixable CRITICAL or HIGH finding not listed here (scripts/trivy_gate.py).
+# Accept a finding only when its code is not reachable in this pipeline, and say why.
+#
+# Every entry names its packages (purls, any version) and has an expiry date: an accepted
+# finding blocks again on that date, and someone has to look at it once more.
+#   Not reachable:       90 days, then re-review.
+#   Waiting for a fix:   the date the fix should have arrived.
+# The layout below is checked line by line by scripts/trivy_gate.py; keep to it.
+
+vulnerabilities:
+  # Brotli: loaded only by curl, which decodes Brotli only when asked to (--compressed). The
+  # health checks never ask, and only call our own servers on localhost.
+  - id: CVE-2026-111497
+    purls:
+      - pkg:deb/debian/libbrotli1
+    statement: "Only curl loads it; the health checks never request Brotli, and call localhost only."
+    expired_at: 2027-02-15
+
+  # OpenSSL: on the internet path (Python's ssl module), but this flaw is in DTLS. The pipeline
+  # speaks TLS over TCP only.
+  - id: CVE-2026-84782
+    purls:
+      - pkg:deb/debian/libssl3
+      - pkg:deb/debian/openssl
+    statement: "DTLS only; the pipeline uses TLS over TCP and never DTLS."
+    expired_at: 2027-02-15
+
+  # Perl: perl-base is Essential in Debian and cannot be removed (the rest of Perl is, in the
+  # Dockerfile). Nothing in the image runs Perl after the build.
+  - id: CVE-2026-13221
+    purls:
+      - pkg:deb/debian/perl-base
+    statement: "Nothing runs Perl at runtime; perl-base cannot be removed (Essential)."
+    expired_at: 2027-02-15
+  - id: CVE-2026-42496
+    purls:
+      - pkg:deb/debian/perl-base
+    statement: "Archive::Tar; nothing runs Perl at runtime; perl-base cannot be removed (Essential)."
+    expired_at: 2027-02-15
+  - id: CVE-2026-8376
+    purls:
+      - pkg:deb/debian/perl-base
+    statement: "32-bit builds only; the image is 64-bit ARM, and nothing runs Perl at runtime."
+    expired_at: 2027-02-15
+  - id: CVE-2026-42497
+    purls:
+      - pkg:deb/debian/perl-base
+    statement: "Archive::Tar; nothing runs Perl at runtime; perl-base cannot be removed (Essential)."
+    expired_at: 2027-02-15
+  - id: CVE-2026-48962
+    purls:
+      - pkg:deb/debian/perl-base
+    statement: "IO::Compress; nothing runs Perl at runtime; perl-base cannot be removed (Essential)."
+    expired_at: 2027-02-15
+  - id: CVE-2026-57432
+    purls:
+      - pkg:deb/debian/perl-base
+    statement: "pack/unpack; nothing runs Perl at runtime; perl-base cannot be removed (Essential)."
+    expired_at: 2027-02-15
+  - id: CVE-2026-57433
+    purls:
+      - pkg:deb/debian/perl-base
+    statement: "Storable; nothing runs Perl at runtime; perl-base cannot be removed (Essential)."
+    expired_at: 2027-02-15
+
+  # apt: runs only at build time, as root, against Debian's signed archive. The containers run
+  # as unprivileged users and never call it. Kept for a pinned snapshot upgrade if one is needed.
+  - id: CVE-2026-109518
+    purls:
+      - pkg:deb/debian/apt
+      - pkg:deb/debian/apt-transport-https
+      - pkg:deb/debian/libapt-pkg6.0
+      - pkg:deb/debian/libapt-pkg7.0
+    statement: "apt runs only during the build; nothing calls it at runtime."
+    expired_at: 2027-02-15
+
+  # pcre2: no process of the pipeline loads Debian's copy (grep and libselinux use it).
+  - id: CVE-2026-103111
+    purls:
+      - pkg:deb/debian/libpcre2-8-0
+    statement: "Not loaded by any pipeline process; used by grep and libselinux only."
+    expired_at: 2027-02-15
+
+  # zlib in the Postgres image: fixed in Debian, and in the next build of postgres:16.15, which
+  # Dependabot proposes once it is 14 days old. Postgres is reachable only from the other
+  # containers, and the backup's pg_dump writes plain SQL (gzip runs on the host).
+  - id: CVE-2026-85091
+    purls:
+      - pkg:deb/debian/zlib1g
+    statement: "Postgres image; fix arrives with the next postgres:16.15 build via Dependabot."
+    expired_at: 2026-12-15
