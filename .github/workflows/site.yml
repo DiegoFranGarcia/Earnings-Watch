@@ -1,0 +1,68 @@
+# The public site: built from the pipeline's latest export, deployed to GitHub Pages (ADR 17).
+# A repository has one Pages site, so this is the only workflow that deploys it.
+name: Site
+
+on:
+  # The publish_site DAG starts this after every good dbt build, naming its export.
+  workflow_dispatch:
+    inputs:
+      export:
+        description: >-
+          The export to deploy (exports/site/runs/<run>). Empty: the latest one. Name an older
+          run to roll the site back.
+        type: string
+        required: false
+        default: ""
+  # The fallback, after the host's morning window: deploys the latest export even if the DAG
+  # could not start this workflow (an expired token, say; the DAG alerts on that too).
+  schedule:
+    - cron: "30 10 * * *"
+  # A change to how the site is built takes effect without waiting for the pipeline.
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/site.yml
+      - scripts/build_site.py
+
+permissions: {}
+
+concurrency:
+  group: pages
+  cancel-in-progress: false  # never stop a deployment halfway; the next one waits its turn
+
+jobs:
+  deploy:
+    name: Build and deploy the site
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # Only main may deploy to this environment, and only jobs in it can assume gha-site.
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read  # check out scripts/build_site.py
+      id-token: write  # AWS (gha-site) and Pages both verify this job with OIDC
+      pages: write  # deploy the site
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd  # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_SITE_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Build the site from the export (checked against its manifest)
+        env:
+          LAKE_BUCKET: ${{ vars.LAKE_BUCKET }}
+          EXPORT: ${{ inputs.export }}
+        run: python3 scripts/build_site.py --bucket "$LAKE_BUCKET" --export "$EXPORT" --out _site
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5.0.0
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346  # v5.0.1

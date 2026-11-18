@@ -10,7 +10,7 @@ Each arrow is a data asset, not a clock: a DAG starts because new data arrived.
 
 ~~~text
 SEC -> sec_daily_index (06:00 UTC daily) -> silver_daily_index -> snowflake_load_daily_index -> raw_daily_index -+
-SEC -> sec_fsds_quarterly (quarterly) -> Spark on EMR -> silver_fsds -> snowflake_load -> raw_fsds --------------+-> dbt_build -> marts
+SEC -> sec_fsds_quarterly (quarterly) -> Spark on EMR -> silver_fsds -> snowflake_load -> raw_fsds --------------+-> dbt_build -> marts -> publish_site -> Site workflow -> GitHub Pages
 SEC -> company_tickers_snapshot (07:00 UTC daily) -> bronze tickers
 ~~~
 
@@ -227,3 +227,68 @@ Snowflake holds two public keys per user, so a key can change with no downtime:
 Every Snowflake statement carries a query tag naming the pipeline step and the Airflow run:
 `earningswatch:load:<run_id>` or `earningswatch:dbt:<run_id>`. `ACCOUNT_USAGE.QUERY_HISTORY`
 and `QUERY_ATTRIBUTION_HISTORY` group credits by them.
+
+## The public site
+
+**What runs.** After every `dbt_build` that passes, `publish_site` exports the dbt docs to
+`exports/site/runs/<run>/` and points `exports/site/current.json` at them, then starts the
+`Site` workflow (`.github/workflows/site.yml`). The workflow checks every file against the
+export's manifest and deploys to GitHub Pages: <https://diegofrangarcia.github.io/Earnings-Watch/>.
+It also runs daily at 10:30 UTC, and when `site.yml` or `scripts/build_site.py` changes on main.
+See ADR 17.
+
+**Check it.** The landing page shows when its data was exported; `site.json` says which export
+is live:
+
+~~~bash
+curl -s https://diegofrangarcia.github.io/Earnings-Watch/site.json
+gh run list --workflow Site --limit 5
+~~~
+
+**Redeploy the latest export, or roll back to an older one:**
+
+~~~bash
+gh workflow run site.yml                                              # the latest
+aws s3 ls "s3://$LAKE_BUCKET/exports/site/runs/"                       # the exports there are
+gh workflow run site.yml -f export=exports/site/runs/<run>            # roll back to that one
+~~~
+
+A rollback lasts until the next export or the next scheduled run deploys the latest again.
+
+**Publish by hand** (the same code the DAG runs; your AWS session and dbt profile):
+
+~~~bash
+PYTHONPATH=airflow/dags uv run python -m earningswatch.site_export --bucket "$LAKE_BUCKET" --dispatch
+~~~
+
+**If `trigger_site_deploy` failed:** the export is already published, and the 10:30 UTC run
+deploys it. The usual cause is the token: `GitHub answered 401` means it expired or was
+revoked; rotate it (below). `403` means it lacks Actions: write on this repository.
+
+**If the Site workflow failed:** its log says why. `NOT DEPLOYED: ...` means the export did not
+match its manifest, or listed a file the site's layout does not know; the live site is
+unchanged. A file over the 20 MB budget stops the export itself, in `publish_site`.
+
+**If the scheduled runs stopped:** GitHub disables a public repository's schedules after 60
+days without activity. `gh workflow enable site.yml` turns it back on.
+
+### The dispatch token
+
+A fine-grained personal access token, kept in Secrets Manager as
+`earningswatch/dev/github-dispatch-token`, read by `trigger_site_deploy` when it runs.
+
+- **Expires 2027-11-17.** GitHub emails a reminder before then; rotate it a week ahead.
+- To rotate: on GitHub, Settings → Developer settings → Personal access tokens → Fine-grained
+  tokens → `earningswatch-site-dispatch` → Regenerate token (same scope: only
+  `DiegoFranGarcia/Earnings-Watch`, Repository permissions → Actions: Read and write). Copy it,
+  then store it without it reaching your screen or shell history (zsh):
+
+  ~~~bash
+  read -rs 'token?Paste the token, then press Enter: ' && echo
+  printf '%s' "$token" | aws secretsmanager put-secret-value \
+    --secret-id earningswatch/dev/github-dispatch-token --secret-string file:///dev/stdin \
+    --query VersionId --output text
+  unset token; pbcopy </dev/null    # clear the variable and the clipboard
+  ~~~
+
+  Then update the expiry date above, and test it with *Publish by hand*.
