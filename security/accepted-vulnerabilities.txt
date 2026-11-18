@@ -7,8 +7,8 @@
 # again, and someone has to look at it once more. Not reachable: 90 days, then re-review. Waiting
 # for a fix: the date it should have arrived. The scheduled scan fails 14 days before an expiry.
 
-CVE-2026-114605 | dnspython | 2026-12-02 | Email validation for the admin user only; the fix (2.9.2) is 15 days old on 2026-11-18.
-CVE-2026-128089 | dnspython | 2026-12-02 | Email validation for the admin user only; the fix (2.9.2) is 15 days old on 2026-11-18.
+CVE-2026-114605 | dnspython | 2026-12-09 | Email validation for the admin user only; the fix (2.9.2) is 15 days old on 2026-11-18.
+CVE-2026-128089 | dnspython | 2026-12-09 | Email validation for the admin user only; the fix (2.9.2) is 15 days old on 2026-11-18.
 CVE-2026-112907 | filelock | 2027-02-15 | Lock files in a single-user container or developer machine; the fix needs major version 4.
 CVE-2026-112908 | filelock | 2027-02-15 | Lock files in a single-user container or developer machine; the fix needs major version 4.
 CVE-2026-112909 | filelock | 2027-02-15 | Lock files in a single-user container or developer machine; the fix needs major version 4.
