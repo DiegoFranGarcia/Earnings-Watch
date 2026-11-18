@@ -1,0 +1,94 @@
+name: Scheduled scan
+
+# Every Monday, the images production runs are scanned again: the current release (read from
+# current.env) and the Postgres image pinned in deploy/compose.yaml. A vulnerability published
+# after a release went out shows up here, not at the next release. Also scanned: the project's
+# lockfile, and how far the image's Python is behind its newest release.
+#
+# Every check runs even when another fails, and a failed run emails whoever last changed the
+# schedule below (GitHub's rule for scheduled workflows). GitHub pauses schedules in a public
+# repository after 60 days without activity: any push, or a manual run, starts them again.
+on:
+  schedule:
+    - cron: "23 11 * * 1"  # Mondays 11:23 UTC, after the host's morning run (it stops at 09:45)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: scheduled-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    if: github.ref == 'refs/heads/main'  # the AWS role trusts main only
+    runs-on: ubuntu-24.04-arm  # the image is arm64, and pip freeze runs inside it
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write  # gha-scan: read the release pointer and pull the image, nothing else
+    env:
+      LAKE_BUCKET: ${{ vars.LAKE_BUCKET }}
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
+
+      - name: AWS CLI (the runner's own, or a pinned and verified install)
+        run: |
+          if aws --version 2>/dev/null; then exit 0; fi
+          curl -fsSL -o /tmp/awscli.zip https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.39.3.zip
+          echo "f6eb845fbacb11bee87de3f5fbe8043773cbe89d0414607b44b71e216eb9226b  /tmp/awscli.zip" | sha256sum -c -
+          unzip -q /tmp/awscli.zip -d /tmp && sudo /tmp/aws/install && aws --version
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd  # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_SCAN_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: The image production runs (the current release)
+        id: release
+        run: |
+          image="$(aws s3 cp --only-show-errors "s3://$LAKE_BUCKET/artifacts/releases/current.env" - \
+            | sed -n 's/^AIRFLOW_IMAGE=//p')"
+          [[ "$image" == "$ECR_REPOSITORY:"* && "${image##*:}" =~ ^[0-9a-f]{12}$ ]] \
+            || { echo "unexpected current release: '$image'" >&2; exit 1; }
+          aws ecr get-login-password \
+            | docker login --username AWS --password-stdin "${ECR_REPOSITORY%%/*}"
+          docker pull --quiet "$image" >/dev/null
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "### Scheduled scan of release \`${image##*:}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Operating-system vulnerabilities in both images (Trivy; warnings fail here)
+        if: always() && steps.release.outcome == 'success'
+        env:
+          IMAGE: ${{ steps.release.outputs.image }}
+        run: scripts/scan_os_packages.sh "$IMAGE" --strict | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Known vulnerabilities in the image's Python environments (pip-audit)
+        if: always() && steps.release.outcome == 'success'
+        env:
+          IMAGE: ${{ steps.release.outputs.image }}
+        run: scripts/audit_image_python.sh "$IMAGE" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Known vulnerabilities in the project's lockfile (pip-audit)
+        if: always()
+        run: |
+          uv export --frozen --format requirements-txt --no-hashes --all-groups --no-emit-project \
+            > /tmp/project.txt
+          scripts/audit_python.sh /tmp/project.txt "the project's lockfile" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: How far the image's Python is behind its newest release
+        if: always() && steps.release.outcome == 'success'
+        env:
+          IMAGE: ${{ steps.release.outputs.image }}
+        run: |
+          version="$(docker run --rm --network none --entrypoint python "$IMAGE" \
+            -c 'import platform; print(platform.python_version())')"
+          python3 scripts/check_python_freshness.py "$version" security/python-freshness.txt \
+            | tee -a "$GITHUB_STEP_SUMMARY"

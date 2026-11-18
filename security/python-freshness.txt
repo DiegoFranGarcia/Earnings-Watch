@@ -1,0 +1,5 @@
+# The image's Python, accepted while it is behind its newest release: "version | until | reason".
+# scripts/check_python_freshness.py (the scheduled scan) fails when the image's Python is behind a
+# release at least 14 days old, unless that exact version is listed here and the date has not passed.
+
+3.12.14 | 2026-12-31 | CPython comes with the Airflow base image (slim-3.3.2-python3.12): it moves when Apache rebuilds that image (Dependabot proposes the digest) or with Airflow 3.3.3. Its bundled expat parses only AWS's replies, over authenticated TLS.

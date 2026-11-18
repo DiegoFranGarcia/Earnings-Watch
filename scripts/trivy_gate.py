@@ -9,7 +9,8 @@ this script decides. It fails when:
     were read once when the gate was introduced), or
   - the ignore file breaks its own rules: every entry names its packages, says why, and expires
     no more than 180 days from today.
-Entries that no longer match anything, and entries expiring within 14 days, are warnings.
+Entries that no longer match anything, and entries expiring within 14 days, are warnings; with
+--strict (the scheduled scan), warnings fail too, so they reach someone.
 Exit status 0 means the images may ship.
 """
 
@@ -69,7 +70,9 @@ def read_ignore_file(path):
 
 
 def main():
-    ignore_path, reports = sys.argv[1], [arg.split("=", 1) for arg in sys.argv[2:]]
+    strict = "--strict" in sys.argv[1:]
+    arguments = [arg for arg in sys.argv[1:] if arg != "--strict"]
+    ignore_path, reports = arguments[0], [arg.split("=", 1) for arg in arguments[1:]]
     entries, errors = read_ignore_file(ignore_path)
     today = datetime.datetime.now(datetime.UTC).date()
     suppressed_ids, blocking, warnings = set(), [], []
@@ -139,12 +142,13 @@ def main():
         print(f"::error::{line}", file=sys.stderr)
     for line in warnings:
         print(f"::warning::{line}", file=sys.stderr)
-    verdict = "fails" if blocking or errors else "passes"
+    failed = bool(blocking or errors or (strict and warnings))
+    verdict = "fails" if failed else "passes"
     print(
         f"\nThe gate **{verdict}**: {len(blocking)} blocking finding(s), {len(errors)} error(s) "
         f"in the accepted list, {len(warnings)} warning(s)."
     )
-    return 1 if blocking or errors else 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

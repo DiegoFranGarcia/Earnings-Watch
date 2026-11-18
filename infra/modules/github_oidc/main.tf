@@ -23,6 +23,7 @@ data "aws_iam_policy_document" "trust" {
   for_each = {
     plan   = "${local.subject}:pull_request"           # any pull request in this repository
     deploy = "${local.subject}:environment:production" # only main may use this environment
+    scan   = "${local.subject}:ref:refs/heads/main"    # any job on main: reviewed code only
   }
 
   statement {
@@ -144,4 +145,43 @@ resource "aws_iam_role_policy" "deploy" {
   name   = "publish-and-deploy"
   role   = aws_iam_role.deploy.id
   policy = data.aws_iam_policy_document.deploy.json
+}
+
+# The scheduled scan, on main: read which release is current, and pull its image. Nothing else:
+# no secrets, no writes, no commands. GitHub issues a token for main only to workflows already
+# on main, and they got there through a reviewed pull request.
+resource "aws_iam_role" "scan" {
+  name               = "earnings-watch-${var.env}-gha-scan"
+  description        = "GitHub Actions, main in ${var.repository}: read the current release, pull its image"
+  assume_role_policy = data.aws_iam_policy_document.trust["scan"].json
+}
+
+data "aws_iam_policy_document" "scan" {
+  statement {
+    sid       = "LogInToEcr"
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"] # AWS defines this action on no resource
+  }
+
+  statement {
+    sid = "PullFromOneRepository"
+    actions = [
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:BatchGetImage",
+      "ecr:GetDownloadUrlForLayer",
+    ]
+    resources = [var.ecr_repository_arn]
+  }
+
+  statement {
+    sid       = "ReadTheCurrentRelease"
+    actions   = ["s3:GetObject"]
+    resources = ["${var.lake_bucket_arn}/artifacts/releases/current.env"]
+  }
+}
+
+resource "aws_iam_role_policy" "scan" {
+  name   = "read-the-current-release"
+  role   = aws_iam_role.scan.id
+  policy = data.aws_iam_policy_document.scan.json
 }
