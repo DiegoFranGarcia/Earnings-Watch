@@ -21,9 +21,10 @@ resource "aws_iam_openid_connect_provider" "github" {
 
 data "aws_iam_policy_document" "trust" {
   for_each = {
-    plan   = "${local.subject}:pull_request"           # any pull request in this repository
-    deploy = "${local.subject}:environment:production" # only main may use this environment
-    scan   = "${local.subject}:ref:refs/heads/main"    # any job on main: reviewed code only
+    plan   = "${local.subject}:pull_request"             # any pull request in this repository
+    deploy = "${local.subject}:environment:production"   # only main may use this environment
+    scan   = "${local.subject}:ref:refs/heads/main"      # any job on main: reviewed code only
+    site   = "${local.subject}:environment:github-pages" # Pages deploys: only main may use it
   }
 
   statement {
@@ -184,4 +185,26 @@ resource "aws_iam_role_policy" "scan" {
   name   = "read-the-current-release"
   role   = aws_iam_role.scan.id
   policy = data.aws_iam_policy_document.scan.json
+}
+
+# The site workflow (.github/workflows/site.yml): read the published exports, nothing else. Trusted
+# only for jobs in the github-pages environment, which GitHub lets only main deploy from.
+resource "aws_iam_role" "site" {
+  name               = "earnings-watch-${var.env}-gha-site"
+  description        = "GitHub Actions, github-pages environment in ${var.repository}: read the site exports"
+  assume_role_policy = data.aws_iam_policy_document.trust["site"].json
+}
+
+data "aws_iam_policy_document" "site" {
+  statement {
+    sid       = "ReadTheSiteExports"
+    actions   = ["s3:GetObject"]
+    resources = ["${var.lake_bucket_arn}/exports/site/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "site" {
+  name   = "read-the-site-exports"
+  role   = aws_iam_role.site.id
+  policy = data.aws_iam_policy_document.site.json
 }

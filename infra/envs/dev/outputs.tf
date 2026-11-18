@@ -33,3 +33,7 @@ output "github_deploy_role_arn" {
 output "github_scan_role_arn" {
   value = module.github_oidc.scan_role_arn
 }
+
+output "github_site_role_arn" {
+  value = module.github_oidc.site_role_arn
+}

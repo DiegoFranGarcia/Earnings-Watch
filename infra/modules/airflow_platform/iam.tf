@@ -14,7 +14,7 @@ data "aws_iam_policy_document" "host_trust" {
 
 resource "aws_iam_role" "host" {
   name               = "earnings-watch-${var.env}-airflow-host"
-  description        = "The Airflow host: lake prefixes, one EMR application, three secrets"
+  description        = "The Airflow host: lake prefixes, one EMR application, its own secrets"
   assume_role_policy = data.aws_iam_policy_document.host_trust.json
 }
 
@@ -31,7 +31,8 @@ data "aws_iam_policy_document" "host" {
     resources = [
       "${var.lake_bucket_arn}/bronze/*",
       "${var.lake_bucket_arn}/silver/*",
-      "${var.lake_bucket_arn}/airflow/*", # task logs and metadata backups
+      "${var.lake_bucket_arn}/airflow/*",      # task logs and metadata backups
+      "${var.lake_bucket_arn}/exports/site/*", # what the public site shows, after each good build
     ]
   }
 

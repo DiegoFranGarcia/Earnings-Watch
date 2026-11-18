@@ -9,3 +9,7 @@ output "deploy_role_arn" {
 output "scan_role_arn" {
   value = aws_iam_role.scan.arn
 }
+
+output "site_role_arn" {
+  value = aws_iam_role.site.arn
+}
