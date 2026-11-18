@@ -277,7 +277,8 @@ days without activity. `gh workflow enable site.yml` turns it back on.
 A fine-grained personal access token, kept in Secrets Manager as
 `earningswatch/dev/github-dispatch-token`, read by `trigger_site_deploy` when it runs.
 
-- **Expires 2027-11-17.** GitHub emails a reminder before then; rotate it a week ahead.
+- **Expires 2027-02-16** (90 days, the longest GitHub allows here). GitHub emails a reminder
+  before then; rotate it a week ahead, the same week the Trivy suppressions come up (2027-02-15).
 - To rotate: on GitHub, Settings → Developer settings → Personal access tokens → Fine-grained
   tokens → `earningswatch-site-dispatch` → Regenerate token (same scope: only
   `DiegoFranGarcia/Earnings-Watch`, Repository permissions → Actions: Read and write). Copy it,
