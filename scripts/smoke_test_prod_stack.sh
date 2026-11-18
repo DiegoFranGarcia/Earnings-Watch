@@ -19,7 +19,7 @@ exec </dev/null
 
 image="${1:?usage: scripts/smoke_test_prod_stack.sh <image>}"
 throwaway="${SMOKE_TEST_THROWAWAY:-0}"
-expected_dags="company_tickers_snapshot dbt_build sec_daily_index sec_fsds_quarterly snowflake_load snowflake_load_daily_index"
+expected_dags="company_tickers_snapshot dbt_build publish_site sec_daily_index sec_fsds_quarterly snowflake_load snowflake_load_daily_index"
 cd "$(git rev-parse --show-toplevel)"
 
 home="$(mktemp -d)"
@@ -156,7 +156,7 @@ echo "registered: ${registered:-(none)} (attempt $attempt of 24)"
 if [ "$registered" != "$expected_dags" ]; then
   echo "the last attempt's output:" >&2
   echo "$raw" | grep -vi openlineage | tail -8 >&2
-  fail "the DAG processor did not register exactly the six DAGs within two minutes"
+  fail "the DAG processor did not register exactly the seven DAGs within two minutes"
 fi
 
 echo "--- the admin user (created by airflow-init; without it, nobody can log in to the UI):"

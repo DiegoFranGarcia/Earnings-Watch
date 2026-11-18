@@ -22,6 +22,7 @@ DAGS = Path(__file__).resolve().parents[2] / "airflow" / "dags"
 EXPECTED_DAGS = {
     "company_tickers_snapshot",
     "dbt_build",
+    "publish_site",
     "sec_daily_index",
     "sec_fsds_quarterly",
     "snowflake_load",
