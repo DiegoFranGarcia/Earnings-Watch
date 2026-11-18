@@ -21,6 +21,7 @@ airflow/config/airflow.cfg
 *.tfstate.*
 *.tfvars
 !*.tfvars.example
+!infra/envs/dev/airflow.auto.tfvars
 backend.hcl
 crash.log
 
