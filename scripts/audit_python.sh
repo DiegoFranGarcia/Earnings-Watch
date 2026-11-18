@@ -19,8 +19,19 @@ report="$(mktemp)"; errors="$(mktemp)"
 trap 'rm -f "$report" "$errors"' EXIT
 
 # pip-audit exits 1 both when it finds vulnerabilities and when it fails: the report decides which.
-uvx --exclude-newer "$cutoff" --from pip-audit==2.10.1 pip-audit -r "$list" --no-deps --disable-pip \
-  --progress-spinner off --format json >"$report" 2>"$errors" </dev/null || true
+# PyPI's answers for packages with thousands of releases (botocore, boto3) can take longer than
+# pip-audit's default 15 seconds, so it gets 60, and one more try if it still produced no report.
+# A retry cannot hide a vulnerability: a run that finds one always writes its report.
+for attempt in 1 2; do
+  uvx --exclude-newer "$cutoff" --from pip-audit==2.10.1 pip-audit -r "$list" --no-deps --disable-pip \
+    --progress-spinner off --timeout 60 --format json >"$report" 2>"$errors" </dev/null || true
+  if [ -s "$report" ]; then
+    break
+  fi
+  if [ "$attempt" = 1 ]; then
+    echo "pip-audit produced no report for $label (attempt 1); trying once more" >&2
+  fi
+done
 if [ ! -s "$report" ]; then
   echo "pip-audit produced no report for $label:" >&2
   tail -20 "$errors" >&2
