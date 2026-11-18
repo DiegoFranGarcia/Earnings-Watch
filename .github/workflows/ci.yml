@@ -51,7 +51,8 @@ jobs:
     # Both images, tested as they will run, on every push and pull request: the DAG integrity tests
     # in the base image, then the production image's smoke test (every service healthy, every DAG
     # imported, every module the DAG code can import present). Built on arm64, the host's
-    # architecture. Nothing is pushed: the release job builds and pushes on main.
+    # architecture. Then the known vulnerabilities of both images (pip-audit for Python, Trivy
+    # for the operating system); both block. Nothing is pushed: the release job pushes on main.
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
     steps:
@@ -82,15 +83,24 @@ jobs:
           scripts/audit_python.sh /tmp/airflow-env.txt "the image's Airflow environment"
           scripts/audit_python.sh /tmp/dbt-env.txt "the image's dbt environment"
 
-      - name: Operating-system vulnerabilities in the image (Trivy 0.76.1, checksum verified; report only)
+      - name: Operating-system vulnerabilities in both images (Trivy 0.76.1, checksum verified)
+        # Blocks on fixable CRITICAL and HIGH findings, except those accepted in
+        # security/trivyignore.yaml: by package, with a reason, until an expiry date.
         run: |
           curl -fsSL -o /tmp/trivy.tgz \
             https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_Linux-ARM64.tar.gz
           echo "e174dff2a6dba5e3ae41f8d0537a6324405bd08132497340304c6b20e0f16a1f  /tmp/trivy.tgz" | sha256sum -c -
           tar -xzf /tmp/trivy.tgz -C /tmp trivy
-          /tmp/trivy image --quiet --scanners vuln --pkg-types os --format json --output /tmp/trivy.json \
-            earnings-watch-airflow:ci-prod
-          python3 scripts/summarize_trivy.py /tmp/trivy.json | tee -a "$GITHUB_STEP_SUMMARY"
+          postgres="$(sed -nE 's/^[[:space:]]*image:[[:space:]]*(postgres:[^ ]+).*/\1/p' deploy/compose.yaml)"
+          [[ "$postgres" == postgres:*@sha256:* ]] || { echo "no pinned Postgres image in compose.yaml" >&2; exit 1; }
+          for target in "airflow=earnings-watch-airflow:ci-prod" "postgres=$postgres"; do
+            /tmp/trivy image --quiet --scanners vuln --pkg-types os --show-suppressed \
+              --ignorefile security/trivyignore.yaml --format json \
+              --output "/tmp/trivy-${target%%=*}.json" "${target#*=}"
+          done
+          python3 scripts/trivy_gate.py security/trivyignore.yaml \
+            "Airflow image=/tmp/trivy-airflow.json" "Postgres image=/tmp/trivy-postgres.json" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
 
   security:
     # Secrets anywhere in the history (gitleaks), and known vulnerabilities in the project's
