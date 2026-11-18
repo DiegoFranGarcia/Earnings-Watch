@@ -115,18 +115,25 @@ def test_read_token_refuses_an_empty_secret(aws) -> None:
 
 
 class FakeResponse:
-    def __init__(self, status_code: int, text: str = "") -> None:
-        self.status_code, self.text = status_code, text
+    def __init__(self, status_code: int, text: str = "", body: object = None) -> None:
+        self.status_code, self.text, self.body = status_code, text, body
+
+    def json(self) -> object:
+        if self.body is None:
+            raise ValueError("no JSON body")
+        return self.body
 
 
 def test_dispatch_asks_github_to_run_the_site_workflow_on_main() -> None:
     sent = {}
+    link = "https://github.com/owner/repo/actions/runs/1"
 
     def post(url, **kwargs):
         sent.update(url=url, **kwargs)
-        return FakeResponse(204)
+        return FakeResponse(200, body={"workflow_run_id": 1, "html_url": link})
 
-    dispatch_site_workflow("secret-token", "owner/repo", "exports/site/runs/r", post=post)
+    run_url = dispatch_site_workflow("secret-token", "owner/repo", "exports/site/runs/r", post=post)
+    assert run_url == link
     assert (
         sent["url"]
         == "https://api.github.com/repos/owner/repo/actions/workflows/site.yml/dispatches"
@@ -142,3 +149,8 @@ def test_a_refused_dispatch_raises_without_showing_the_token() -> None:
     with pytest.raises(DispatchFailed) as error:
         dispatch_site_workflow("secret-token", "owner/repo", "f", post=post)
     assert "401" in str(error.value) and "secret-token" not in str(error.value)
+
+
+@pytest.mark.parametrize("response", [FakeResponse(204), FakeResponse(200, "not json")])
+def test_a_created_run_without_a_link_is_still_a_success(response) -> None:
+    assert dispatch_site_workflow("t", "owner/repo", "f", post=lambda url, **kw: response) is None

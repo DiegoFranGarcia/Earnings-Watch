@@ -123,7 +123,11 @@ def read_token(secrets, secret_id: str) -> str:
 
 
 def dispatch_site_workflow(token: str, repository: str, folder: str, ref: str = "main", post=None):
-    """Start the site workflow on main, naming the export it should deploy."""
+    """Start the site workflow on main, naming the export it should deploy.
+
+    Returns the new run's link when GitHub gives one: it now answers 200 with the run's ID
+    and links; it used to answer 204 with no body. Both mean the run was created.
+    """
     if post is None:
         import requests
 
@@ -138,8 +142,14 @@ def dispatch_site_workflow(token: str, repository: str, folder: str, ref: str = 
         json={"ref": ref, "inputs": {"export": folder}},
         timeout=30,
     )
-    if response.status_code != 204:  # the token itself never appears in the message
+    if response.status_code not in (200, 204):  # the token itself never appears in the message
         raise DispatchFailed(f"GitHub answered {response.status_code}: {response.text[:300]}")
+    if response.status_code == 204:
+        return None
+    try:
+        return response.json().get("html_url")
+    except (ValueError, AttributeError):  # the run exists; only its link is missing
+        return None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -180,8 +190,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {entry['name']}: {entry['bytes']:,} bytes, sha256 {entry['sha256'][:12]}")
     if args.dispatch:
         token = read_token(boto3.client("secretsmanager", region_name="us-east-1"), args.secret_id)
-        dispatch_site_workflow(token, args.repository, manifest["folder"])
-        print(f"started {SITE_WORKFLOW} on {args.repository} for {manifest['folder']}")
+        run_url = dispatch_site_workflow(token, args.repository, manifest["folder"])
+        print(f"started {SITE_WORKFLOW} for {manifest['folder']}: {run_url or args.repository}")
     return 0
 
 

@@ -97,10 +97,10 @@ def publish_site():
             boto3.client("secretsmanager", region_name="us-east-1"),
             settings.site_dispatch_secret_id,
         )
-        site_export.dispatch_site_workflow(
+        run_url = site_export.dispatch_site_workflow(
             token, settings.site_github_repository, published["folder"]
         )
-        print(f"started {site_export.SITE_WORKFLOW} for {published['folder']}")
+        print(f"started {site_export.SITE_WORKFLOW} for {published['folder']}: {run_url or ''}")
 
     trigger_site_deploy(export())
 
