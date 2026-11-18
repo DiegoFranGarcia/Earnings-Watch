@@ -6,6 +6,7 @@ SEC filings.**
 [![CI](https://github.com/DiegoFranGarcia/Earnings-Watch/actions/workflows/ci.yml/badge.svg)](https://github.com/DiegoFranGarcia/Earnings-Watch/actions/workflows/ci.yml)
 ![Python 3.12](https://img.shields.io/badge/python-3.12-blue)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
+[![Site](https://github.com/DiegoFranGarcia/Earnings-Watch/actions/workflows/site.yml/badge.svg)](https://diegofrangarcia.github.io/Earnings-Watch/)
 
 When net income rises while operating cash flow falls, the gap is made of *accruals*: profit
 not (yet) backed by cash. Accounting research links large accruals to lower-quality earnings
@@ -14,6 +15,9 @@ across every XBRL filer since 2009: idempotent ingestion, a verified lake, Spark
 and tested models.
 
 > A screen for where to look harder, **not investment advice**.
+
+**Live:** [the site](https://diegofrangarcia.github.io/Earnings-Watch/) and its [dbt docs](https://diegofrangarcia.github.io/Earnings-Watch/dbt-docs/), every model, column and
+test with the lineage graph, rebuilt by the pipeline after every dbt build that passes.
 
 ## In numbers
 
