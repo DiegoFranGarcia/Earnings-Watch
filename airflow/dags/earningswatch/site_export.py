@@ -173,7 +173,11 @@ def main(argv: list[str] | None = None) -> int:
     with tempfile.TemporaryDirectory(prefix="earningswatch-site-") as tmp:
         docs = generate_dbt_docs(args.dbt, args.project_dir, Path(tmp), run_id)
         manifest = publish(boto3.client("s3"), args.bucket, run_id, [docs], release, now)
-    print(json.dumps(manifest, indent=2))
+    # dbt has already written its own output to stdout: end with a short summary, not JSON.
+    # The full manifest is exports/site/current.json.
+    print(f"published {manifest['folder']} ({POINTER_KEY} points at it):")
+    for entry in manifest["files"]:
+        print(f"  {entry['name']}: {entry['bytes']:,} bytes, sha256 {entry['sha256'][:12]}")
     if args.dispatch:
         token = read_token(boto3.client("secretsmanager", region_name="us-east-1"), args.secret_id)
         dispatch_site_workflow(token, args.repository, manifest["folder"])
