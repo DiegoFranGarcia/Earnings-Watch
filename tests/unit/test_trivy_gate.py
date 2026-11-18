@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 SPEC = importlib.util.spec_from_file_location(
-    "trivy_gate", Path(__file__).resolve().parents[1] / "scripts" / "trivy_gate.py"
+    "trivy_gate", Path(__file__).resolve().parents[2] / "scripts" / "trivy_gate.py"
 )
 gate = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(gate)

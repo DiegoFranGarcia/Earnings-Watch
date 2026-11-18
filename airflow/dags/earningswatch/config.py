@@ -25,6 +25,10 @@ class Settings:
     sf_user: str | None = None
     sf_private_key_path: str | None = None
     sf_database: str | None = None
+    # The public site (publish_site): the secret holding the token that starts the site
+    # workflow, and the repository it runs in. Optional, like the settings above.
+    site_dispatch_secret_id: str | None = None
+    site_github_repository: str | None = None
 
 
 def _required(name: str) -> str:
@@ -54,4 +58,6 @@ def load_settings() -> Settings:
         sf_user=os.environ.get("SF_USER") or None,
         sf_private_key_path=os.environ.get("SF_PRIVATE_KEY_PATH") or None,
         sf_database=os.environ.get("SF_DATABASE") or None,
+        site_dispatch_secret_id=os.environ.get("SITE_DISPATCH_SECRET_ID") or None,
+        site_github_repository=os.environ.get("SITE_GITHUB_REPOSITORY") or None,
     )

@@ -34,6 +34,10 @@ x-airflow-common:
     AWS_DEFAULT_REGION: us-east-1
     DBT_PROJECT_DIR: /opt/airflow/dbt
     PYTHONPATH: /opt/airflow/dags
+    # publish_site: the secret holding the token that starts the site workflow (read when the
+    # task runs, never written to a file), and the repository the workflow lives in.
+    SITE_DISPATCH_SECRET_ID: earningswatch/dev/github-dispatch-token
+    SITE_GITHUB_REPOSITORY: DiegoFranGarcia/Earnings-Watch
   volumes:
     - ${EARNINGSWATCH_HOME:-/opt/earningswatch}/logs:/opt/airflow/logs
     - ${KEYS_DIR:-/run/earningswatch/keys}:/opt/airflow/keys:ro
