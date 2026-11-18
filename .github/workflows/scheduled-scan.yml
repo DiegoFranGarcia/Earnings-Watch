@@ -74,14 +74,15 @@ jobs:
         if: always() && steps.release.outcome == 'success'
         env:
           IMAGE: ${{ steps.release.outputs.image }}
-        run: scripts/audit_image_python.sh "$IMAGE" | tee -a "$GITHUB_STEP_SUMMARY"
+        run: scripts/audit_image_python.sh "$IMAGE" --strict | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Known vulnerabilities in the project's lockfile (pip-audit)
         if: always()
         run: |
           uv export --frozen --format requirements-txt --no-hashes --all-groups --no-emit-project \
             > /tmp/project.txt
-          scripts/audit_python.sh /tmp/project.txt "the project's lockfile" | tee -a "$GITHUB_STEP_SUMMARY"
+          scripts/audit_python.sh /tmp/project.txt "the project's lockfile" --strict \
+            | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: How far the image's Python is behind its newest release
         if: always() && steps.release.outcome == 'success'
