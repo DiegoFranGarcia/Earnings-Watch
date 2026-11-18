@@ -49,7 +49,9 @@ flowchart LR
 
 Airflow orchestrates and never crunches data: downloads go to **bronze**, immutable and
 receipted; Spark on **EMR Serverless** turns them into typed **silver** Parquet and stops; dbt
-models the answer. Airflow currently runs in Docker locally; it moves to EC2 in a later stage.
+models the answer. Airflow runs on one small EC2 host that wakes for the morning's runs and
+sleeps the rest of the day, starting whichever release CI last published
+([ADR 12](docs/adr/0012-release-by-publishing-a-pointer-the-host-pulls.md)).
 
 ## Stack, and why
 
@@ -62,7 +64,7 @@ models the answer. Airflow currently runs in Docker locally; it moves to EC2 in 
 | **Snowflake** | Separate storage and compute; loads read S3 through a storage integration, with no stored keys ([ADR 4](docs/adr/0004-run-dbt-on-snowflake-and-retire-the-duckdb-target.md)) |
 | **dbt** | Tested, documented models with unit tests and enforced contracts |
 | **Terraform** | Every AWS resource as reviewed code, with cost caps built in |
-| **GitHub Actions** | Lint and every test, including Spark on Java 17, on each push |
+| **GitHub Actions** | Every test, the image built and smoke-tested, vulnerability gates, then the release; AWS through OIDC roles, with no stored keys ([ADR 13](docs/adr/0013-ci-reaches-aws-through-oidc-roles-and-holds-no-real-secret.md), [ADR 15](docs/adr/0015-fix-what-can-be-fixed-accept-the-rest-with-an-expiry.md)) |
 
 Decisions are recorded as [architecture decision records](docs/adr/).
 
@@ -145,7 +147,9 @@ Every check that fired was investigated against the data before anything was cha
 | 4. dbt star schema: company history, restatements, timeliness | ✅ |
 | 5. Orchestration end to end: asset-triggered DAGs, Cosmos, alerts | ✅ |
 | 6. Data quality and observability: AUDIT, circuit breaker, cost per run, chaos drills | ✅ |
-| 7–9. Deployment, CI/CD, demo | |
+| 7. Deployment: EC2 on a schedule, releases pulled with automatic fallback, nightly backups, rebuild drilled | ✅ |
+| 8. CI/CD: OIDC roles, slim dbt CI, smoke tests, vulnerability gates and weekly scans, protected main | in progress |
+| 9. Demo: dashboard, video, write-up | |
 
 A thin end-to-end slice (one quarter, DuckDB, dbt, Streamlit) was built first, so modelling
 problems surfaced in week three rather than week fifteen.
