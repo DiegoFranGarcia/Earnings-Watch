@@ -27,7 +27,8 @@
           { "context": "lint-and-test", "integration_id": 15368 },
           { "context": "image-tests", "integration_id": 15368 },
           { "context": "security", "integration_id": 15368 },
-          { "context": "dbt-slim-ci", "integration_id": 15368 }
+          { "context": "dbt-slim-ci", "integration_id": 15368 },
+          { "context": "terraform", "integration_id": 15368 }
         ]
       }
     }

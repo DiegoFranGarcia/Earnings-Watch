@@ -1,0 +1,39 @@
+# Terraform misconfigurations this project accepts, by design (Trivy's ignore file).
+# CI fails on any CRITICAL or HIGH failed check not listed here (scripts/check_terraform.sh).
+# Each entry is scoped to its file by path, says why, and expires (at most 180 days away), as
+# for the images' findings. Use the check's short ID (AWS-0104): the AVD- form does not match.
+# The layout below is checked line by line by scripts/trivy_gate.py; keep to it. ADR 16.
+
+misconfigurations:
+  # The host reaches the SEC, Snowflake, AWS APIs and OCSP responders, all behind CDNs: no fixed
+  # address list exists. With no NAT gateway, egress by port (443, and 80 for OCSP) is the
+  # tightest rule there is; the host has no inbound rules at all and is reached through SSM.
+  - id: AWS-0104
+    paths:
+      - "**/modules/airflow_platform/network.tf"
+    statement: "Egress to CDN-hosted services by port only; no inbound rules; SSM access only."
+    expired_at: 2027-02-15
+
+  # No NAT gateway (about $32 a month), so the host needs a public address for its egress.
+  - id: AWS-0164
+    paths:
+      - "**/modules/airflow_platform/network.tf"
+    statement: "Public address for egress instead of a NAT gateway; the host accepts no inbound traffic."
+    expired_at: 2027-02-15
+
+  # CloudWatch alarms cannot publish to a topic encrypted with AWS's managed SNS key; a customer
+  # managed key ($1 a month, with its own policy) would protect alarm texts holding no secret.
+  - id: AWS-0095
+    paths:
+      - "**/modules/airflow_platform/alerts.tf"
+    statement: "Alarm notifications only; CloudWatch cannot publish to the AWS-managed SNS key."
+    expired_at: 2027-02-15
+
+  # S3's own encryption (SSE-S3). A customer managed key would add a key policy every reader
+  # needs (Snowflake's role, EMR, the host), for no gain against this project's threats.
+  - id: AWS-0132
+    paths:
+      - "**/modules/lake/main.tf"
+      - "**/bootstrap/main.tf"
+    statement: "SSE-S3 encryption; a customer managed key adds cost and key policies for no gain here."
+    expired_at: 2027-02-15

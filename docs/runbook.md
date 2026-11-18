@@ -146,7 +146,7 @@ scripts/host_exec.sh 'journalctl -u earningswatch --since today --no-pager | tai
 ## Merging a pull request
 
 `main` takes changes only through pull requests whose required checks passed: `lint-and-test`,
-`image-tests`, `security` and `dbt-slim-ci` (`.github/rulesets/main.json`).
+`image-tests`, `security`, `dbt-slim-ci` and `terraform` (`.github/rulesets/main.json`).
 
 - **Merge with `scripts/merge_when_green.sh`**, from the pull request's branch, after pushing.
   It waits for CI on the exact commit you pushed, watches it, and squash-merges only if it
@@ -171,6 +171,7 @@ and [ADR 15](adr/0015-fix-what-can-be-fixed-accept-the-rest-with-an-expiry.md).
 | An entry **matches nothing any more** | The finding is gone: remove the entry. |
 | `pip-audit produced no report` | PyPI did not answer, even after a retry. Rerun the failed jobs: `gh run rerun <run id> --failed`. |
 | The image's Python is **behind** | A newer base image (a Dependabot digest, or an Airflow upgrade), or a new date and reason in `security/python-freshness.txt`. |
+| CI's `terraform` job: a **failed check** (Trivy) or a tflint finding | Fix the Terraform. If the setting is by design, accept the check in `security/trivyignore-terraform.yaml`, scoped to its file by path, with the reason and an expiry date ([ADR 16](adr/0016-check-terraform-statically-in-ci-and-plan-locally.md)). |
 
 Run the scheduled scan by hand at any time: `gh workflow run scheduled-scan.yml`. **GitHub pauses
 schedules after 60 days without activity in the repository:** the Actions tab then shows a banner.

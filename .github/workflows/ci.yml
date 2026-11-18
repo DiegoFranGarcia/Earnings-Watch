@@ -108,6 +108,19 @@ jobs:
             > /tmp/project.txt
           scripts/audit_python.sh /tmp/project.txt "the project's lockfile"
 
+  terraform:
+    # The Terraform code's static checks on every push and pull request: formatting, validation,
+    # tflint, and Trivy's misconfiguration scan. No credentials: plans stay local (ADR 16).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Terraform fmt and validate, tflint, Trivy's misconfiguration scan (pinned, checksum verified)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}  # tflint downloads its AWS ruleset from GitHub
+        run: scripts/check_terraform.sh | tee -a "$GITHUB_STEP_SUMMARY"
+
   dbt-slim-ci:
     # Pull requests: build the dbt models the pull request changed, and everything downstream, in
     # schemas of its own (PR_<number>_*) in EARNINGSWATCH_CI, reading everything unchanged from
