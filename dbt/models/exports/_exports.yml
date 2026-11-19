@@ -194,7 +194,7 @@ models:
       - name: median_abs_restatement_pct
         data_type: double
       - name: median_days_to_first_change
-        data_type: number
+        data_type: decimal(10, 1)
       - name: restatement_group_key
         data_type: varchar
         data_tests: [unique, not_null]
@@ -274,11 +274,11 @@ models:
       - name: late_notices
         data_type: integer
       - name: median_days_to_file
-        data_type: number
+        data_type: integer  # whole days, as in mart_filing_timeliness
       - name: p90_days_to_file
-        data_type: number
+        data_type: integer  # whole days, as in mart_filing_timeliness
       - name: median_days_past_due_when_late
-        data_type: number
+        data_type: integer  # whole days, as in mart_filing_timeliness
       - name: notice_data_available
         data_type: boolean
       - name: on_time_share
