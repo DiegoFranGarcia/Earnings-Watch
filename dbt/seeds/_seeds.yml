@@ -61,3 +61,17 @@ seeds:
           - accepted_values:
               arguments:
                 values: [large_accelerated, accelerated, non_accelerated]
+
+  - name: sic_codes
+    description: >
+      The SEC's Standard Industrial Classification codes, as EDGAR uses them: each code's
+      industry title and the SEC office that reviews its filings. Downloaded on 2026-11-19
+      from https://www.sec.gov/search-filings/standard-industrial-classification-sic-code-list
+      (444 codes; the page was last updated 2026-06-18). Titles keep the SEC's own spelling.
+    columns:
+      - name: sic
+        data_tests: [unique, not_null]
+      - name: office
+        data_tests: [not_null]
+      - name: industry_title
+        data_tests: [not_null]

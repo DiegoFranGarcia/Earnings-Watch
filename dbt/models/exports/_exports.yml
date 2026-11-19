@@ -1,0 +1,340 @@
+version: 2
+
+# The public site's export contract (ADR 17): every model here is exported to Parquet by
+# publish_site and read in the browser, so each holds only what a page shows, and its columns
+# and types are enforced.
+
+models:
+  - name: export_screener
+    description: >
+      Grain: one row per company and reporting view (first_reported or latest), at the
+      company's most recent screened quarter, among companies whose latest screened quarter
+      became knowable within var site_recent_months of the build. With the current company
+      name, its SEC industry (sic_codes) and filer size (filer_group, from filing_deadlines).
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: cik
+        data_type: bigint
+        data_tests: [not_null]
+      - name: reporting_view
+        data_type: varchar
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [first_reported, latest]
+      - name: period_end
+        data_type: date
+        data_tests: [not_null]
+      - name: fiscal_year
+        data_type: integer
+      - name: fiscal_quarter
+        data_type: integer
+      - name: known_at
+        data_type: timestamp_ntz
+        data_tests: [not_null]
+      - name: sic
+        data_type: integer
+        data_tests:
+          # A code the SEC's list lacks is a filer data problem: it warns (ADR 8).
+          - relationships:
+              arguments:
+                to: ref('sic_codes')
+                field: sic
+              config:
+                severity: warn
+                where: "sic is not null"
+      - name: industry_title
+        data_type: varchar
+      - name: filer_status
+        data_type: varchar
+      - name: ttm_net_income
+        data_type: decimal(30, 4)
+      - name: prior_ttm_net_income
+        data_type: decimal(30, 4)
+      - name: ttm_operating_cash_flow
+        data_type: decimal(30, 4)
+      - name: prior_ttm_operating_cash_flow
+        data_type: decimal(30, 4)
+      - name: average_total_assets
+        data_type: decimal(30, 4)
+      - name: accruals
+        data_type: decimal(30, 4)
+      - name: accruals_to_assets
+        data_type: double
+      - name: is_flagged
+        data_type: boolean
+        data_tests: [not_null]
+      - name: company_name
+        data_type: varchar
+      - name: industry_group
+        description: The SEC office that reviews the industry, without "Office of"; Unknown if none.
+        data_type: varchar
+        data_tests: [not_null]
+      - name: filer_group
+        data_type: varchar
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [large_accelerated, accelerated, non_accelerated, unknown]
+      - name: screener_key
+        data_type: varchar
+        data_tests: [unique, not_null]
+
+  - name: export_company_quarters
+    description: >
+      Grain: one row per screener company and quarter end, from var site_first_quarter: net
+      income and operating cash flow (true three-month values) as first reported and latest,
+      whether each was materially restated, and whether any was derived from year-to-date
+      figures.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: cik
+        data_type: bigint
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('export_screener')
+                field: cik
+      - name: period_end
+        data_type: date
+        data_tests: [not_null]
+      - name: fiscal_year
+        data_type: integer
+      - name: fiscal_quarter
+        data_type: integer
+      - name: net_income_first_reported
+        data_type: decimal(28, 4)
+      - name: net_income_latest
+        data_type: decimal(28, 4)
+      - name: operating_cash_flow_first_reported
+        data_type: decimal(28, 4)
+      - name: operating_cash_flow_latest
+        data_type: decimal(28, 4)
+      - name: is_net_income_restated
+        data_type: boolean
+        data_tests: [not_null]
+      - name: is_operating_cash_flow_restated
+        data_type: boolean
+        data_tests: [not_null]
+      - name: is_derived
+        data_type: boolean
+        data_tests: [not_null]
+      - name: company_quarter_key
+        data_type: varchar
+        data_tests: [unique, not_null]
+
+  - name: export_company_history
+    description: >
+      Grain: one row per version of a screener company (dim_company): its name, industry and
+      filer status over time, and when each version began and ended.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: company_key
+        data_type: varchar
+        data_tests: [unique, not_null]
+      - name: cik
+        data_type: bigint
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('export_screener')
+                field: cik
+      - name: version_number
+        data_type: integer
+        data_tests: [not_null]
+      - name: company_name
+        data_type: varchar
+      - name: sic
+        data_type: integer
+      - name: industry_title
+        data_type: varchar
+      - name: filer_status
+        data_type: varchar
+      - name: valid_from
+        data_type: timestamp_ntz
+        data_tests: [not_null]
+      - name: valid_to
+        data_type: timestamp_ntz
+      - name: is_current
+        data_type: boolean
+        data_tests: [not_null]
+
+  - name: export_restatements_by_year
+    description: >
+      Grain: one row per year of first material change, restatement kind and metric: how many
+      restatements, at how many companies, the median absolute change and the median days to
+      the first change. Likely scale errors are excluded.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: change_year
+        data_type: integer
+        data_tests: [not_null]
+      - name: restatement_kind
+        data_type: varchar
+        data_tests: [not_null]
+      - name: metric
+        data_type: varchar
+        data_tests: [not_null]
+      - name: restatements
+        data_type: integer
+      - name: companies
+        data_type: integer
+      - name: median_abs_restatement_pct
+        data_type: double
+      - name: median_days_to_first_change
+        data_type: number
+      - name: restatement_group_key
+        data_type: varchar
+        data_tests: [unique, not_null]
+
+  - name: export_restatements_largest
+    description: >
+      Grain: one row per restatement (mart_restatements), the var site_largest_restatements
+      largest material restatements of net income, revenue and operating cash flow by absolute
+      amount. Likely scale errors are excluded.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: restatement_key
+        data_type: varchar
+        data_tests: [unique, not_null]
+      - name: cik
+        data_type: bigint
+        data_tests: [not_null]
+      - name: company_name
+        data_type: varchar
+      - name: metric
+        data_type: varchar
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [net_income, revenue, operating_cash_flow]
+      - name: period_end
+        data_type: date
+      - name: duration_quarters
+        data_type: integer
+      - name: restatement_kind
+        data_type: varchar
+      - name: first_change_form
+        data_type: varchar
+      - name: first_reported_at
+        data_type: timestamp_ntz
+      - name: first_change_at
+        data_type: timestamp_ntz
+      - name: days_to_first_change
+        data_type: integer
+      - name: first_reported_value
+        data_type: decimal(28, 4)
+      - name: latest_value
+        data_type: decimal(28, 4)
+      - name: restatement_amount
+        data_type: decimal(30, 4)
+      - name: restatement_pct
+        data_type: double
+
+  - name: export_filing_timeliness
+    description: "Grain: one row per filer status, form and period year: mart_filing_timeliness, whole."
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: timeliness_key
+        data_type: varchar
+        data_tests: [unique, not_null]
+      - name: filer_status
+        data_type: varchar
+      - name: filer_group
+        data_type: varchar
+      - name: form
+        data_type: varchar
+      - name: period_year
+        data_type: integer
+      - name: filings
+        data_type: integer
+      - name: on_time_filings
+        data_type: integer
+      - name: within_extension_filings
+        data_type: integer
+      - name: late_filings
+        data_type: integer
+      - name: late_notices
+        data_type: integer
+      - name: median_days_to_file
+        data_type: number
+      - name: p90_days_to_file
+        data_type: number
+      - name: median_days_past_due_when_late
+        data_type: number
+      - name: notice_data_available
+        data_type: boolean
+      - name: on_time_share
+        data_type: double
+
+  - name: export_pipeline_health
+    description: "Grain: one row per calendar day, the last 30: mart_pipeline_health, whole."
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: date_day
+        data_type: date
+        data_tests: [unique, not_null]
+      - name: latest_index_day
+        data_type: date
+      - name: index_lag_days
+        data_type: integer
+      - name: dbt_invocations
+        data_type: integer
+      - name: tests_run
+        data_type: integer
+      - name: tests_passed
+        data_type: integer
+      - name: tests_warned
+        data_type: integer
+      - name: tests_failed
+        data_type: integer
+      - name: models_failed
+        data_type: integer
+      - name: test_pass_rate
+        data_type: double
+      - name: volume_checks
+        data_type: integer
+      - name: volume_failures
+        data_type: integer
+      - name: dollars
+        data_type: decimal(18, 6)
+
+exposures:
+  - name: public_site
+    label: The public site
+    type: dashboard
+    maturity: medium
+    url: https://diegofrangarcia.github.io/Earnings-Watch/
+    description: >
+      The static site on GitHub Pages (ADR 17): the earnings-quality screener, one page per
+      company, restatements, filing timeliness and pipeline health, read in the browser from
+      these models' Parquet exports. Rebuilt by publish_site after every dbt build that passes.
+    depends_on:
+      - ref('export_screener')
+      - ref('export_company_quarters')
+      - ref('export_company_history')
+      - ref('export_restatements_by_year')
+      - ref('export_restatements_largest')
+      - ref('export_filing_timeliness')
+      - ref('export_pipeline_health')
+    owner:
+      name: EarningsWatch
