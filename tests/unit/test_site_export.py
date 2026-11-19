@@ -154,3 +154,123 @@ def test_a_refused_dispatch_raises_without_showing_the_token() -> None:
 @pytest.mark.parametrize("response", [FakeResponse(204), FakeResponse(200, "not json")])
 def test_a_created_run_without_a_link_is_still_a_success(response) -> None:
     assert dispatch_site_workflow("t", "owner/repo", "f", post=lambda url, **kw: response) is None
+
+
+# -- the tables, as Parquet -------------------------------------------------------------------
+
+
+class FakeCursor:
+    """Answers count(*) and select * for the tables it holds, as Snowflake's cursor would."""
+
+    def __init__(self, tables: dict, counts: dict, log: list) -> None:
+        self.tables, self.counts, self.log, self.sql = tables, counts, log, ""
+
+    def execute(self, sql: str) -> None:
+        self.log.append(sql)
+        self.sql = sql
+
+    def _model(self) -> str:
+        return self.sql.rsplit(".", 1)[-1]
+
+    def fetchone(self) -> tuple:
+        model = self._model()
+        return (self.counts.get(model, self.tables[model].num_rows),)
+
+    def fetch_arrow_all(self, force_return_table: bool = False):
+        assert force_return_table, "an empty result must come back as a table, not None"
+        return self.tables[self._model()]
+
+    def close(self) -> None:
+        self.log.append("closed")
+
+
+class FakeConnection:
+    def __init__(self, tables: dict, counts: dict | None = None) -> None:
+        self.tables, self.counts, self.log = tables, counts or {}, []
+
+    def cursor(self) -> FakeCursor:
+        return FakeCursor(self.tables, self.counts, self.log)
+
+
+def screener_table(rows: int = 3):
+    import pyarrow as pa
+
+    return pa.table({"CIK": list(range(rows)), "IS_FLAGGED": [True] * rows})
+
+
+def test_each_table_becomes_a_zstd_parquet_file_with_lower_case_columns(tmp_path) -> None:
+    import pyarrow.parquet as pq
+
+    conn = FakeConnection({"export_screener": screener_table()})
+    written = site_export.export_tables(conn, "EARNINGSWATCH_DEV", tmp_path, ["export_screener"])
+
+    path = tmp_path / "export_screener.parquet"
+    assert written == {path: 3}
+    assert pq.read_table(path).column_names == ["cik", "is_flagged"]
+    assert pq.ParquetFile(path).metadata.row_group(0).column(0).compression == "ZSTD"
+    assert conn.log == [
+        "select count(*) from EARNINGSWATCH_DEV.MARTS.export_screener",
+        "select * from EARNINGSWATCH_DEV.MARTS.export_screener",
+        "closed",
+    ]
+
+
+def test_a_table_read_short_stops_the_export(tmp_path) -> None:
+    conn = FakeConnection({"export_screener": screener_table(3)}, counts={"export_screener": 4})
+    with pytest.raises(site_export.ExportIncomplete, match="4 rows in Snowflake, 3 read"):
+        site_export.export_tables(conn, "EARNINGSWATCH_DEV", tmp_path, ["export_screener"])
+    assert conn.log[-1] == "closed"
+
+
+def test_an_empty_table_stops_the_export(tmp_path) -> None:
+    conn = FakeConnection({"export_screener": screener_table(0)})
+    with pytest.raises(site_export.ExportIncomplete, match="0 rows"):
+        site_export.export_tables(conn, "EARNINGSWATCH_DEV", tmp_path, ["export_screener"])
+
+
+@pytest.mark.parametrize(
+    ("database", "model"),
+    [("DEV; drop table x", "export_screener"), ("EARNINGSWATCH_DEV", "export_screener; --")],
+)
+def test_only_plain_names_reach_the_sql(tmp_path, database, model) -> None:
+    with pytest.raises(ValueError, match="not a"):
+        site_export.export_tables(FakeConnection({}), database, tmp_path, [model])
+
+
+def test_the_manifest_records_each_tables_row_count(aws, docs, tmp_path) -> None:
+    s3, _ = aws
+    table = tmp_path / "export_screener.parquet"
+    table.write_bytes(b"PAR1 stand-in")
+    manifest = publish(s3, BUCKET, "run-1", [docs, table], release="x", now=NOW, rows={table: 3})
+    by_name = {entry["name"]: entry for entry in manifest["files"]}
+    assert by_name["export_screener.parquet"]["rows"] == 3
+    assert "rows" not in by_name["dbt-docs.html"]
+
+
+def test_the_export_tables_match_what_the_site_lays_out() -> None:
+    import importlib.util
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parents[2] / "scripts" / "build_site.py"
+    spec = importlib.util.spec_from_file_location("build_site", script)
+    build_site = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(build_site)
+    assert build_site.TABLES == site_export.EXPORT_MODELS
+
+
+def test_a_connection_names_its_role_and_warehouse_only_when_asked(monkeypatch) -> None:
+    import snowflake.connector
+
+    from earningswatch import snowflake_load
+
+    calls = []
+    monkeypatch.setattr(snowflake.connector, "connect", lambda **kwargs: calls.append(kwargs))
+    snowflake_load.connect("acct", "SVC_AIRFLOW", "~/k.p8", "EARNINGSWATCH_DEV", "tag")
+    snowflake_load.connect(
+        "acct", "SVC_AIRFLOW", "~/k.p8", "EARNINGSWATCH_DEV", "tag",
+        role="REPORTER", warehouse="WH_REPORTING", schema="MARTS",
+    )  # fmt: skip
+    loads, site = calls
+    assert "role" not in loads and "warehouse" not in loads and loads["schema"] == "RAW"
+    assert site["role"] == "REPORTER" and site["warehouse"] == "WH_REPORTING"
+    assert site["schema"] == "MARTS"

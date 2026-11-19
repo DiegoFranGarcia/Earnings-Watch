@@ -7,6 +7,7 @@ one's size and sha256 against it, and assembles the site:
 
     <out>/index.html            the landing page: what this is, and how fresh its data is
     <out>/dbt-docs/index.html   the dbt docs, exactly as the pipeline generated them
+    <out>/data/<table>.parquet  each table the pages read (dbt models/exports)
     <out>/site.json             which export is live (run, time, commit), for monitoring
 
 Anything unexpected (a file the layout does not know, a hash that does not match, a key outside
@@ -40,8 +41,23 @@ COMMIT_PATTERN = re.compile(r"[0-9a-f]{7,40}")
 REPOSITORY_PATTERN = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 FILE_BUDGET_BYTES = 20 * 1024 * 1024  # the same budget the export enforces (site_export.py)
 # Where each file of an export goes in the site. A file not listed here stops the build:
-# Stage 9 adds the dashboard's files here, in the same change that starts exporting them.
-LAYOUT = {"dbt-docs.html": "dbt-docs/index.html"}
+# a table joins it in the same change that starts exporting it (site_export.EXPORT_MODELS).
+TABLES = (
+    "export_screener",
+    "export_company_quarters",
+    "export_company_history",
+    "export_restatements_by_year",
+    "export_restatements_largest",
+    "export_filing_timeliness",
+    "export_pipeline_health",
+)
+LAYOUT = {
+    "dbt-docs.html": "dbt-docs/index.html",
+    **{f"{table}.parquet": f"data/{table}.parquet" for table in TABLES},
+}
+# What every export must hold. The tables become required when the pages that read them ship;
+# until then an export from before them (the live one, or an older one rolled back to) builds.
+REQUIRED = {"dbt-docs.html"}
 
 Download = Callable[[str, str, Path], None]
 
@@ -98,7 +114,10 @@ def check_manifest(manifest: object, export: str) -> list[dict]:
             raise BadExport(f"{name}: {size!r} bytes is not within the budget")
         if not re.fullmatch(r"[0-9a-f]{64}", str(entry.get("sha256"))):
             raise BadExport(f"{name}: no valid sha256")
-    missing = set(LAYOUT) - set(names)
+        rows = entry.get("rows")
+        if name.endswith(".parquet") and not (isinstance(rows, int) and rows > 0):
+            raise BadExport(f"{name}: a table without a positive row count")
+    missing = REQUIRED - set(names)
     if missing:
         raise BadExport(f"the export is missing {', '.join(sorted(missing))}")
     return files
@@ -219,7 +238,9 @@ def build(
         "exported_at": manifest["exported_at"],
         "commit": commit_of(manifest.get("release")),
         "folder": manifest["folder"],
-        "files": {e["name"]: {"bytes": e["bytes"], "sha256": e["sha256"]} for e in files},
+        "files": {
+            e["name"]: {k: e[k] for k in ("bytes", "rows", "sha256") if k in e} for e in files
+        },
     }
     (out / "site.json").write_text(json.dumps(live, indent=2) + "\n")
     return manifest

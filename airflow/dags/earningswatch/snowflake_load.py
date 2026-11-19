@@ -201,23 +201,37 @@ def quarters_to_load(manual: str, announced: list[str]) -> list[str]:
     return sorted(set(quarters))
 
 
-def connect(account: str, user: str, private_key_path: str, database: str, query_tag: str):
+def connect(
+    account: str,
+    user: str,
+    private_key_path: str,
+    database: str,
+    query_tag: str,
+    *,
+    role: str | None = None,
+    warehouse: str | None = None,
+    schema: str = "RAW",
+):
     """A Snowflake connection with key-pair login, defaulting to the RAW schema.
 
     The query tag labels every statement in Snowflake's query history, for cost attribution.
+    Without a role or warehouse, the user's defaults apply (the loads: LOADER on WH_LOAD);
+    publish_site names REPORTER and WH_REPORTING, the second role SVC_AIRFLOW holds.
     """
     import os
 
     import snowflake.connector
 
+    chosen = {"role": role, "warehouse": warehouse}
     return snowflake.connector.connect(
         account=account,
         user=user,
         authenticator="SNOWFLAKE_JWT",
         private_key_file=os.path.expanduser(private_key_path),
         database=database,
-        schema="RAW",
+        schema=schema,
         session_parameters={"QUERY_TAG": query_tag},
+        **{name: value for name, value in chosen.items() if value},
     )
 
 
@@ -323,8 +337,11 @@ class SnowflakeSettingsMissing(RuntimeError):
     """Snowflake is not configured for this Airflow."""
 
 
-def connect_from_settings(settings, query_tag: str):
-    """A connection from the SF_* settings, naming any that are missing."""
+def connect_from_settings(settings, query_tag: str, **choices):
+    """A connection from the SF_* settings, naming any that are missing.
+
+    choices (role, warehouse, schema) are passed on to connect().
+    """
     missing = [
         name
         for name, value in (
@@ -343,6 +360,7 @@ def connect_from_settings(settings, query_tag: str):
         settings.sf_private_key_path,
         settings.sf_database,
         query_tag,
+        **choices,
     )
 
 

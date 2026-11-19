@@ -182,3 +182,40 @@ def test_main_reports_a_bad_export_without_a_traceback(tmp_path, monkeypatch, ca
     monkeypatch.setattr(build_site, "build", refuse)
     assert build_site.main(["--bucket", "b", "--out", str(tmp_path / "_site")]) == 1
     assert "NOT DEPLOYED: the export is missing" in capsys.readouterr().err
+
+
+def test_tables_are_laid_out_under_data_with_their_row_counts(tmp_path) -> None:
+    table = b"PAR1 stand-in"
+    data = manifest()
+    data["files"].append(
+        {
+            "name": "export_screener.parquet",
+            "key": f"{FOLDER}/export_screener.parquet",
+            "bytes": len(table),
+            "rows": 6925,
+            "sha256": hashlib.sha256(table).hexdigest(),
+        }
+    )
+    bucket = bucket_with(data)
+    bucket.objects[f"{FOLDER}/export_screener.parquet"] = table
+    out = tmp_path / "_site"
+    build_site.build("b", "", out, REPO, download=bucket)
+    assert (out / "data" / "export_screener.parquet").read_bytes() == table
+    live = json.loads((out / "site.json").read_text())
+    assert live["files"]["export_screener.parquet"]["rows"] == 6925
+
+
+@pytest.mark.parametrize("rows", [None, 0, "6925"])
+def test_a_table_without_a_positive_row_count_is_refused(tmp_path, rows) -> None:
+    data = manifest()
+    entry = {
+        "name": "export_screener.parquet",
+        "key": f"{FOLDER}/export_screener.parquet",
+        "bytes": 1,
+        "sha256": "0" * 64,
+    }
+    if rows is not None:
+        entry["rows"] = rows
+    data["files"].append(entry)
+    with pytest.raises(build_site.BadExport, match="row count"):
+        build_site.build("b", "", tmp_path / "_site", REPO, download=bucket_with(data))
