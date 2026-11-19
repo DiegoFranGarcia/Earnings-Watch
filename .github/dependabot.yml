@@ -22,3 +22,10 @@ updates:
     ignore:
       - dependency-name: postgres
         update-types: [version-update:semver-major, version-update:semver-minor]
+  # The site's npm packages (site/), with the same cooldown: ADR 14, ADR 19.
+  - package-ecosystem: npm
+    directory: /site
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14

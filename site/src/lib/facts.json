@@ -1,0 +1,5 @@
+{
+  "_about": "Facts measured once, not refreshed by the pipeline: each says when and where it was measured.",
+  "numbers_read": { "value": 188865271, "years": 17, "lines_lost": 0, "source": "docs/benchmarks.md", "measured": "the full-history conversion, 70 quarters" },
+  "parity": { "matched": 24, "checks": 24, "source": "docs/benchmarks.md", "measured": "8 quarters, every engine against the DuckDB reference, by types and every row" }
+}
