@@ -1,7 +1,9 @@
-// Browser tests of the built site, served the way GitHub Pages serves it (tests/serve.mjs):
-// only under /Earnings-Watch/. Build first, against the fixture export:
+// Browser tests of the assembled site, served the way GitHub Pages serves it (tests/serve.mjs):
+// only under /Earnings-Watch/, with the app beside the export's files as the deploy puts it.
+// From the repository's root:
 //   uv run python scripts/make_site_fixture.py --out site/fixture
-//   EW_DATA_DIR=fixture npm run build && npm test
+//   cd site && EW_DATA_DIR=fixture npm run build
+//   python3 ../scripts/build_site.py --add-app build --out fixture && npm test
 import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({

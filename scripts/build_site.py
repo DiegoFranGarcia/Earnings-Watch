@@ -3,19 +3,24 @@
 The pipeline's publish_site DAG publishes each export to S3 (earningswatch.site_export): the
 run's files, its manifest.json, then exports/site/current.json. This reads a manifest (current.json
 by default, or one run's manifest.json to roll back), downloads every file it lists, checks each
-one's size and sha256 against it, and assembles the site:
+one's size and sha256 against it, and lays the export out:
 
-    <out>/index.html            the landing page: what this is, and how fresh its data is
     <out>/dbt-docs/index.html   the dbt docs, exactly as the pipeline generated them
     <out>/data/<table>.parquet  each table the pages read (dbt models/exports)
     <out>/site.json             which export is live (run, time, commit), for monitoring
 
+The site's app (site/, ADR 19) is then built from that folder, and --add-app puts the app's
+pages beside those files: index.html, one folder per page, and _app/ (its scripts, styles and
+fonts). The app may not replace a file of the export, nor the export a page of the app.
+
 Anything unexpected (a file the layout does not know, a hash that does not match, a key outside
-the export's folder) stops the build, and the site stays as it was.
+the export's folder, a missing table) stops the build, and the site stays as it was.
 
 Standard library only: it runs on a bare GitHub runner, with the AWS CLI for downloads.
 
     python3 scripts/build_site.py --bucket <lake> --out _site [--export exports/site/runs/<run>]
+    (cd site && EW_DATA_DIR=../_site npm run build)
+    python3 scripts/build_site.py --add-app site/build --out _site
 """
 
 from __future__ import annotations
@@ -23,7 +28,6 @@ from __future__ import annotations
 import argparse
 import datetime
 import hashlib
-import html
 import json
 import os
 import re
@@ -38,7 +42,6 @@ POINTER_KEY = "exports/site/current.json"
 EXPORT_PATTERN = re.compile(r"exports/site/runs/[A-Za-z0-9._-]+")
 NAME_PATTERN = re.compile(r"[A-Za-z0-9._-]+")
 COMMIT_PATTERN = re.compile(r"[0-9a-f]{7,40}")
-REPOSITORY_PATTERN = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 FILE_BUDGET_BYTES = 20 * 1024 * 1024  # the same budget the export enforces (site_export.py)
 # Where each file of an export goes in the site. A file not listed here stops the build:
 # a table joins it in the same change that starts exporting it (site_export.EXPORT_MODELS).
@@ -55,9 +58,11 @@ LAYOUT = {
     "dbt-docs.html": "dbt-docs/index.html",
     **{f"{table}.parquet": f"data/{table}.parquet" for table in TABLES},
 }
-# What every export must hold. The tables become required when the pages that read them ship;
-# until then an export from before them (the live one, or an older one rolled back to) builds.
-REQUIRED = {"dbt-docs.html"}
+# What every export must hold: everything in the layout, since the app's pages read every table
+# when the site is built. An export from before the tables (before 2026-11-19) cannot be deployed.
+REQUIRED = set(LAYOUT)
+# The export's places in the site, which the app's build may not use.
+EXPORT_PLACES = {"data", "dbt-docs", "site.json"}
 
 Download = Callable[[str, str, Path], None]
 
@@ -139,82 +144,8 @@ def commit_of(release: object) -> str | None:
     return tail if COMMIT_PATTERN.fullmatch(tail) else None
 
 
-def as_of(exported_at: str) -> str:
-    moment = datetime.datetime.fromisoformat(exported_at).astimezone(datetime.UTC)
-    return f"{moment:%A %-d %B %Y, %H:%M} UTC"
-
-
-def landing_page(manifest: dict, repository: str) -> str:
-    """The site's front page. Every value from the manifest is escaped."""
-    repo_url = f"https://github.com/{repository}"
-    commit = commit_of(manifest.get("release"))
-    code = (
-        f'code <a href="{repo_url}/commit/{commit}"><code>{commit[:12]}</code></a>'
-        if commit
-        else "code: unknown release"
-    )
-    when = html.escape(as_of(manifest["exported_at"]))
-    stamp = html.escape(manifest["exported_at"])
-    run = html.escape(str(manifest.get("run_id", "")))
-    return f"""<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy"
-      content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
-<meta name="description"
-      content="SEC EDGAR financial statements, from raw filings to tested models.">
-<title>EarningsWatch</title>
-<style>
-  :root {{ color-scheme: light dark; --fg: #1a1a1a; --muted: #5c5c5c; --bg: #fbfbf9;
-          --line: #dcdcd6; --accent: #0b5cad; }}
-  @media (prefers-color-scheme: dark) {{
-    :root {{ --fg: #ececea; --muted: #a3a3a0; --bg: #161616; --line: #333331; --accent: #7db4ef; }}
-  }}
-  body {{ margin: 0; background: var(--bg); color: var(--fg);
-         font: 17px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }}
-  main {{ max-width: 40rem; margin: 0 auto; padding: 4rem 1rem 3rem; }}
-  h1 {{ font-size: 2rem; margin: 0 0 .5rem; letter-spacing: -.01em; }}
-  p {{ margin: 0 0 1rem; }}
-  .lede {{ color: var(--muted); }}
-  .fresh {{ border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
-           padding: .75rem 0; margin: 2rem 0; font-size: .95rem; }}
-  ul {{ list-style: none; padding: 0; margin: 0; }}
-  li {{ margin: 0 0 1.25rem; }}
-  a {{ color: var(--accent); }}
-  li a {{ font-weight: 600; }}
-  li span {{ display: block; color: var(--muted); font-size: .95rem; }}
-  footer {{ color: var(--muted); font-size: .85rem; margin-top: 3rem; }}
-</style>
-</head>
-<body>
-<main>
-  <h1>EarningsWatch</h1>
-  <p class="lede">Quarterly financial statements from SEC EDGAR, taken from raw filings to
-  tested models by an orchestrated pipeline: S3, Spark on EMR Serverless, Snowflake, dbt
-  and Airflow.</p>
-  <p class="fresh">Data as of <time datetime="{stamp}">{when}</time> &middot; {code}</p>
-  <ul>
-    <li><a href="dbt-docs/">dbt docs</a>
-      <span>Every model, column and test, with the lineage graph from sources to marts.</span></li>
-    <li><a href="{repo_url}">Source code</a>
-      <span>The pipeline, its infrastructure as code, tests and design decisions.</span></li>
-  </ul>
-  <footer>Rebuilt by the pipeline after every dbt build that passes all its tests
-  (run <code>{run}</code>).</footer>
-</main>
-</body>
-</html>
-"""
-
-
-def build(
-    bucket: str, export: str, out: Path, repository: str, download: Download = aws_download
-) -> dict:
-    """Download, verify and assemble one export into `out`, which must not exist yet."""
-    if not REPOSITORY_PATTERN.fullmatch(repository):
-        raise BadExport(f"not a repository: {repository!r}")
+def build(bucket: str, export: str, out: Path, download: Download = aws_download) -> dict:
+    """Download, verify and lay out one export into `out`, which must not exist yet."""
     key = manifest_key(export)
     out.mkdir(parents=True)  # fails if it exists: never mix two builds
     with tempfile.TemporaryDirectory(prefix="earningswatch-site-") as tmp:
@@ -232,7 +163,6 @@ def build(
             target = out / LAYOUT[entry["name"]]
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(local, target)
-    (out / "index.html").write_text(landing_page(manifest, repository))
     live = {
         "run_id": manifest.get("run_id"),
         "exported_at": manifest["exported_at"],
@@ -246,18 +176,47 @@ def build(
     return manifest
 
 
+def add_app(app: Path, out: Path) -> int:
+    """Copy the app's build into a laid-out export, beside its files; how many files it copied."""
+    if not (out / "site.json").is_file():
+        raise BadExport(f"{out} holds no export (site.json): build the export first")
+    if not (app / "index.html").is_file():
+        raise BadExport(f"{app} is not the app's build (no index.html)")
+    files = sorted(p for p in app.rglob("*") if not p.is_dir())
+    for path in files:
+        rel = path.relative_to(app)
+        if path.is_symlink() or not path.is_file():
+            raise BadExport(f"the app's build holds something other than a file: {rel}")
+        if rel.parts[0] in EXPORT_PLACES or (out / rel).exists():
+            raise BadExport(f"the app's build would replace the export's {rel}")
+    for path in files:
+        target = out / path.relative_to(app)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, target)
+    return len(files)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build the site from one export.")
-    parser.add_argument("--bucket", required=True, help="the lake bucket")
+    parser.add_argument("--bucket", help="the lake bucket")
     parser.add_argument("--export", default="", help="exports/site/runs/<run>; empty: latest")
     parser.add_argument("--out", default="_site", type=Path)
     parser.add_argument(
-        "--repository",
-        default=os.environ.get("GITHUB_REPOSITORY", "DiegoFranGarcia/Earnings-Watch"),
+        "--add-app", type=Path, metavar="BUILD", help="instead: put the app's build into --out"
     )
     args = parser.parse_args(argv)
+    if args.add_app:
+        try:
+            copied = add_app(args.add_app, args.out)
+        except BadExport as exc:
+            print(f"NOT DEPLOYED: {exc}", file=sys.stderr)
+            return 1
+        print(f"Added the app's {copied} files beside the export in {args.out}.")
+        return 0
+    if not args.bucket:
+        parser.error("--bucket is required to build from an export")
     try:
-        manifest = build(args.bucket, args.export, args.out, args.repository)
+        manifest = build(args.bucket, args.export, args.out)
     except BadExport as exc:
         print(f"NOT DEPLOYED: {exc}", file=sys.stderr)
         return 1

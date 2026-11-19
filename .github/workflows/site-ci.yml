@@ -1,6 +1,7 @@
 # The public site's app (site/), checked on every pull request: the sixth required check, `site`.
-# It builds against an invented fixture export, never real data, and tests the result in a real
-# browser served the way GitHub Pages serves it, under /Earnings-Watch/ (ADR 19).
+# It builds against an invented fixture export, never real data, assembles it as the deploy does
+# (site.yml: the app beside the export's files), and tests the result in a real browser served
+# the way GitHub Pages serves it, under /Earnings-Watch/ (ADR 19).
 name: Site CI
 
 on:
@@ -49,6 +50,9 @@ jobs:
         run: |
           uv run --frozen python ../scripts/make_site_fixture.py --out fixture
           EW_DATA_DIR=fixture npm run build
+
+      - name: Assemble as the deploy does (the app beside the export's files)
+        run: python3 ../scripts/build_site.py --add-app build --out fixture
 
       - name: Browser tests, under /Earnings-Watch/ as on Pages
         run: |

@@ -1,11 +1,12 @@
-// Serve the built site the way GitHub Pages serves a project site: only under the base path,
-// a folder without its trailing slash redirected (301), index.html for a folder, 404 elsewhere.
-// The browser tests run against this, so a wrong base path fails here as it would on Pages.
+// Serve the assembled site the way GitHub Pages serves a project site: only under the base
+// path, a folder without its trailing slash redirected (301), index.html for a folder, 404
+// elsewhere. The browser tests run against this, so a wrong base path fails here as it would on
+// Pages. SITE_DIR: the export with the app added beside it (build_site.py --add-app), as deployed.
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 
-const ROOT = path.resolve(process.env.SITE_DIR ?? "build");
+const ROOT = path.resolve(process.env.SITE_DIR ?? "fixture");
 const BASE = process.env.BASE_PATH ?? "/Earnings-Watch";
 const PORT = Number(process.env.PORT ?? 4173);
 /** @type {Record<string, string>} */

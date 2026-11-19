@@ -10,6 +10,7 @@ import importlib.util
 from pathlib import Path
 
 import pyarrow.parquet as pq
+import pytest
 import yaml
 
 from earningswatch import site_export
@@ -50,3 +51,21 @@ def test_the_fixture_is_the_same_every_time(tmp_path) -> None:
         assert pq.read_table(path).equals(pq.read_table(tmp_path / "b" / "data" / path.name)), (
             path.name
         )
+
+
+def test_the_fixture_is_laid_out_as_build_site_lays_out_an_export(tmp_path) -> None:
+    fixture.write(tmp_path / "f")
+    assert (tmp_path / "f" / "dbt-docs" / "index.html").is_file()
+    assert (tmp_path / "f" / "site.json").is_file()
+
+
+def test_a_fixture_replaces_an_earlier_one_but_nothing_else(tmp_path) -> None:
+    fixture.write(tmp_path / "f")
+    (tmp_path / "f" / "index.html").write_text("an app added earlier")
+    fixture.write(tmp_path / "f")
+    assert not (tmp_path / "f" / "index.html").exists()
+    (tmp_path / "other").mkdir()
+    (tmp_path / "other" / "notes.txt").write_text("mine")
+    with pytest.raises(SystemExit, match="not a fixture"):
+        fixture.write(tmp_path / "other")
+    assert (tmp_path / "other" / "notes.txt").read_text() == "mine"
