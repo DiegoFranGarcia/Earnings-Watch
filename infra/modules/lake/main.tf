@@ -54,6 +54,20 @@ resource "aws_s3_bucket_lifecycle_configuration" "lake" {
     }
   }
 
+  # The site's exports: current.json points at one of these folders. 90 days outlasts GitHub's
+  # 60-day limit on schedules in an inactive repository, so the fallback never finds its export gone.
+  rule {
+    id     = "expire-site-exports-after-90-days"
+    status = "Enabled"
+    filter {
+      prefix = "exports/site/runs/"
+    }
+
+    expiration {
+      days = 90
+    }
+  }
+
   rule {
     id     = "expire-airflow-task-logs-after-30-days"
     status = "Enabled"

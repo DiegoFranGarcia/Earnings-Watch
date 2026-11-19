@@ -3,7 +3,7 @@
 Triggered by the marts asset, which dbt_build updates only after its volume gate, every model and
 every test passed: the site can never show data the circuit breaker held back (ADR 10).
 
-1. export: generate the dbt docs (one static HTML file, with the production catalog) and publish
+1. export: generate the dbt docs (one static HTML file, with the catalog: ADR 18) and publish
    them as this run's export: the run's folder, its manifest, then exports/site/current.json
    (earningswatch.site_export). Stage 9 adds the dashboard's Parquet files to the same export.
 2. trigger_site_deploy: start .github/workflows/site.yml, which builds the site from that export

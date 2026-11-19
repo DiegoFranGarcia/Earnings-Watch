@@ -14,7 +14,7 @@ locals {
   warehouses = {
     WH_LOAD      = { timeout = 3600, comment = "COPY INTO from S3 (LOADER)" }
     WH_TRANSFORM = { timeout = 3600, comment = "dbt builds (TRANSFORMER)" }
-    WH_REPORTING = { timeout = 300, comment = "Dashboard queries (REPORTER)" }
+    WH_REPORTING = { timeout = 300, comment = "The public site's export (REPORTER)" }
     WH_CI        = { timeout = 900, comment = "Slim dbt builds on pull requests (CI)" }
   }
 
@@ -230,4 +230,20 @@ resource "snowflake_grant_account_role" "service_user" {
 
   role_name = snowflake_account_role.this[each.value.role].name
   user_name = snowflake_service_user.this[each.key].name
+}
+
+# A second role for the same program: its default stays, and it names this one when it connects.
+locals {
+  extra_role_grants = {
+    for pair in flatten([
+      for name, user in var.service_users : [for role in user.extra_roles : { user = name, role = role }]
+    ]) : "${pair.user}.${pair.role}" => pair
+  }
+}
+
+resource "snowflake_grant_account_role" "service_user_extra" {
+  for_each = local.extra_role_grants
+
+  role_name = snowflake_account_role.this[each.value.role].name
+  user_name = snowflake_service_user.this[each.value.user].name
 }
