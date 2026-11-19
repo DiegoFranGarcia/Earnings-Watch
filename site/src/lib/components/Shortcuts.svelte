@@ -69,5 +69,8 @@
     font: inherit; font-size: 12.5px; background: none; color: var(--text);
     border: 1px solid var(--rule); padding: 3px 10px; cursor: pointer;
   }
-  .hint { position: fixed; right: 14px; bottom: 58px; font-size: 12px; color: var(--muted); margin: 0; }
+  .hint {
+    position: fixed; right: 14px; bottom: 58px; font-size: 12px; color: var(--muted); margin: 0;
+    background: var(--bg); padding: 2px 6px;
+  }
 </style>

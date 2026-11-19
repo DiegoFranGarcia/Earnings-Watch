@@ -46,6 +46,9 @@ jobs:
       - name: Types and Svelte checks
         run: npm run check
 
+      - name: The screener's logic, on its own (node --test)
+        run: npm run test:unit
+
       - name: Build against the fixture export
         run: |
           uv run --frozen python ../scripts/make_site_fixture.py --out fixture

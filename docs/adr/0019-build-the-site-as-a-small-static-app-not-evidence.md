@@ -18,9 +18,10 @@ Checked on 2026-11-19, before building on it:
 
 - The site is a small SvelteKit app in `site/`, prerendered to static files for GitHub Pages
   (`@sveltejs/adapter-static`), under the base path `/Earnings-Watch`. Its dependencies are few,
-  actively maintained and permissively licensed: Svelte and SvelteKit (MIT), hyparquet and
-  hyparquet-compressors to read Parquet (MIT, no dependencies of their own), ECharts for charts
-  when the pages need them (Apache-2.0), and DuckDB-WASM for the SQL console (MIT).
+  actively maintained and permissively licensed: Svelte and SvelteKit (MIT), hyparquet and fzstd
+  to read Parquet and its ZSTD compression (MIT, no dependencies of their own, plain JavaScript:
+  the Content-Security-Policy allows no WebAssembly outside the SQL console), ECharts for charts
+  (Apache-2.0, loaded only on pages with charts), and DuckDB-WASM for the SQL console (MIT).
 - The data logic stays in SQL. dbt's export models (`models/exports`) decide what each page
   shows; the app formats and filters it, nothing more.
 - The numbers a visitor sees first are read from the export when the site is built, and are in
