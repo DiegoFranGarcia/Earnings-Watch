@@ -32,8 +32,9 @@ module "snowflake" {
   source = "../../modules/snowflake"
 
   # One user per program, each with its own key pair in ~/.snowflake/keys/ (never in git).
+  # SVC_AIRFLOW also holds REPORTER: publish_site reads MARTS read-only for the site's export.
   service_users = {
-    SVC_AIRFLOW   = { role = "LOADER", warehouse = "WH_LOAD", public_key_path = "~/.snowflake/keys/svc_airflow_rsa_key.pub" }
+    SVC_AIRFLOW   = { role = "LOADER", warehouse = "WH_LOAD", public_key_path = "~/.snowflake/keys/svc_airflow_rsa_key.pub", extra_roles = ["REPORTER"] }
     SVC_DBT       = { role = "TRANSFORMER", warehouse = "WH_TRANSFORM", public_key_path = "~/.snowflake/keys/svc_dbt_rsa_key.pub" }
     SVC_STREAMLIT = { role = "REPORTER", warehouse = "WH_REPORTING", public_key_path = "~/.snowflake/keys/svc_streamlit_rsa_key.pub" }
     SVC_CI        = { role = "CI", warehouse = "WH_CI", public_key_path = "~/.snowflake/keys/svc_ci_rsa_key.pub" }
