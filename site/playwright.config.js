@@ -8,6 +8,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "tests",
+  testIgnore: "unit/**",  // node --test (npm run test:unit)
   forbidOnly: !!process.env.CI,
   reporter: process.env.CI ? [["list"], ["github"]] : "list",
   use: { baseURL: "http://localhost:4173/Earnings-Watch/", trace: "retain-on-failure" },

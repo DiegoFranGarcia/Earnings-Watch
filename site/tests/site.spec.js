@@ -158,7 +158,8 @@ test("dates are shown in UTC, wherever the visitor is", async ({ browser }) => {
   const context = await browser.newContext({ timezoneId: "America/New_York" });
   const page = await context.newPage();
   await page.goto("http://localhost:4173/Earnings-Watch/");
-  await expect(page.locator(".status")).toContainText("2026-09-30");
+  await expect(page.getByTestId("through")).toHaveText("Q3 2026");
+  await expect(page.locator(".status [title]")).toHaveAttribute("title", "The newest quarter in the data ends 2026-09-30");
   await expect(page.locator(".status")).toContainText("06:05 UTC");
   await expect(page.locator("tbody tr").first().locator("td").last()).toHaveText("2026-09-30");
   await context.close();

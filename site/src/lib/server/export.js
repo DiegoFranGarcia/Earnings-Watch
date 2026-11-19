@@ -3,33 +3,23 @@
 // build_site.py assembled and verified (data/*.parquet and site.json); in CI, a fixture export.
 import fs from "node:fs";
 import path from "node:path";
-import { asyncBufferFromFile, parquetReadObjects } from "hyparquet";
-import { compressors } from "hyparquet-compressors";
+import { asyncBufferFromFile } from "hyparquet";
+import { readParquet } from "#lib/parquet.js";
+import { typicalQuarter } from "#lib/screener.js";
 
 const DIR = process.env.EW_DATA_DIR ?? "../_site";
 
 /** @type {Map<string, Promise<Record<string, any>[]>>} */
 const tables = new Map();
 
-/** Every row of one exported table, with 64-bit integers as plain numbers. @param {string} name */
+/** Every row of one exported table, read once per build. @param {string} name */
 export function table(name) {
   if (!tables.has(name)) {
     const file = path.join(DIR, "data", `${name}.parquet`);
     if (!fs.existsSync(file)) {
       throw new Error(`${file} is missing: set EW_DATA_DIR to an export (build_site.py's output)`);
     }
-    tables.set(
-      name,
-      asyncBufferFromFile(file)
-        .then((buffer) => parquetReadObjects({ file: buffer, compressors }))
-        .then((rows) =>
-          rows.map((row) =>
-            Object.fromEntries(
-              Object.entries(row).map(([k, v]) => [k, typeof v === "bigint" ? Number(v) : v]),
-            ),
-          ),
-        ),
-    );
+    tables.set(name, asyncBufferFromFile(file).then(readParquet));
   }
   return /** @type {Promise<Record<string, any>[]>} */ (tables.get(name));
 }
@@ -48,8 +38,10 @@ const iso = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : String(d)
 export async function status() {
   const screener = await table("export_screener");
   const live = liveExport();
-  const through = screener.reduce((m, r) => (iso(r.period_end) > m ? iso(r.period_end) : m), "");
-  return { exported_at: live.exported_at, commit: live.commit, data_through: through };
+  const { label, newest } = typicalQuarter(
+    screener.filter((r) => r.reporting_view === "latest").map((r) => iso(r.period_end)),
+  );
+  return { exported_at: live.exported_at, commit: live.commit, through: label, newest };
 }
 
 /** Everything the overview shows, computed once at build time. */

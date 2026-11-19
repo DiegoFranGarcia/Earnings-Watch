@@ -2,7 +2,7 @@
   import { day, utcTime } from "#lib/format.js";
   import { link } from "#lib/pages.js";
 
-  /** @type {{ status: { exported_at: string, data_through: string } }} */
+  /** @type {{ status: { exported_at: string, through: string, newest: string } }} */
   let { status } = $props();
   let theme = $state("light");
 
@@ -23,7 +23,9 @@
 
 <header class="status">
   <a class="brand" href={link("/")}>EarningsWatch</a>
-  <span><span class="hide-sm">Financial data through quarters ending</span><span class="show-sm">Data to</span>{" "}{status.data_through}</span>
+  <span title="The newest quarter in the data ends {status.newest}">
+    <span class="hide-sm">Most companies have reported through</span><span class="show-sm">Data to</span>{" "}<span data-testid="through">{status.through}</span>
+  </span>
   <span class="ok"><span class="hide-sm">Pipeline checked {day(status.exported_at)}</span>{" "}{utcTime(status.exported_at)}</span>
   <button class="theme" type="button" onclick={toggle} aria-pressed={theme === "dark"}>
     {theme === "dark" ? "Paper" : "Terminal"}
