@@ -1,0 +1,163 @@
+// What a visitor gets, checked in a real browser against the fixture export (40 invented
+// companies: 10 flagged as first reported, 9 after restatements).
+import { expect, test } from "@playwright/test";
+
+const PAGES = ["", "screener/", "company/", "restatements/", "timeliness/", "pipeline/", "sql/"];
+
+/**
+ * Open a page and wait until it is interactive (the layout sets data-ready once hydrated).
+ * @param {import("@playwright/test").Page} page
+ */
+async function open(page, path = "") {
+  const response = await page.goto(path);
+  await expect(page.locator("html")).toHaveAttribute("data-ready", "true");
+  return response;
+}
+
+/**
+ * Fail on anything a visitor should never see: errors, warnings, broken requests, third parties.
+ * @param {import("@playwright/test").Page} page
+ */
+function watch(page) {
+  /** @type {string[]} */
+  const problems = [];
+  page.on("console", (m) => ["error", "warning"].includes(m.type()) && problems.push(`console ${m.type()}: ${m.text()}`));
+  page.on("pageerror", (e) => problems.push(`page error: ${e.message}`));
+  page.on("response", (r) => r.status() >= 400 && problems.push(`${r.status()} ${r.url()}`));
+  page.on("request", (r) => !r.url().startsWith("http://localhost:4173/Earnings-Watch/") && problems.push(`left the site: ${r.url()}`));
+  return problems;
+}
+
+test("every page loads under the base path, cleanly, with its tab marked current", async ({ page }) => {
+  const problems = watch(page);
+  for (const [i, path] of PAGES.entries()) {
+    const response = await open(page, path);
+    expect(response?.status(), path).toBe(200);
+    await expect(page.locator(".tabs a").nth(i)).toHaveAttribute("aria-current", "page");
+    await expect(page.locator('meta[http-equiv="content-security-policy"]')).toHaveCount(1);
+  }
+  expect(problems).toEqual([]);
+});
+
+test("the answer is in the page before any JavaScript runs", async ({ browser }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const page = await context.newPage();
+  await page.goto("http://localhost:4173/Earnings-Watch/");
+  await expect(page.getByTestId("flagged")).toHaveText("9");
+  await expect(page.getByTestId("universe")).toHaveText("40");
+  await expect(page.getByTestId("view-name")).toHaveText("after restatements");
+  await context.close();
+});
+
+test("the view toggle changes the number, its universe and its name together", async ({ page }) => {
+  await open(page);
+  await page.getByRole("button", { name: "As first reported" }).click();
+  await expect(page.getByTestId("flagged")).toHaveText("10");
+  await expect(page.getByTestId("view-name")).toHaveText("as first reported");
+  await expect(page.locator(".shown")).toHaveText("Showing 10 of 10");
+});
+
+test("search and industry filters narrow the table", async ({ page }) => {
+  await open(page);
+  await page.getByLabel("Search a company").fill("Fixture Co 40");
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await page.getByLabel("Search a company").fill("no such company");
+  await expect(page.locator("tbody")).toContainText("No flagged company matches");
+  await page.getByLabel("Search a company").fill("");
+  await page.getByRole("button", { name: "Technology" }).click();
+  await expect(page.locator("tbody tr td:nth-child(2)")).toHaveText(Array(2).fill("Technology"));
+});
+
+test.describe("keyboard shortcuts", () => {
+  test("digits open pages in tab order", async ({ page }) => {
+    await open(page);
+    await page.keyboard.press("2");
+    await expect(page).toHaveURL(/\/Earnings-Watch\/company\/$/);
+    await page.keyboard.press("0");
+    await expect(page).toHaveURL(/\/Earnings-Watch\/$/);
+  });
+
+  for (const modifier of ["Control", "Meta", "Alt"]) {
+    test(`${modifier}+digit is left to the browser`, async ({ page }) => {
+      await open(page);
+      await page.keyboard.press(`${modifier}+3`);
+      await page.waitForTimeout(300);
+      await expect(page).toHaveURL(/\/Earnings-Watch\/$/);
+    });
+  }
+
+  test("typing a digit in a box types it and changes no page", async ({ page }) => {
+    await open(page);
+    await page.getByLabel("Search a company").click();
+    await page.keyboard.type("5");
+    await expect(page.getByLabel("Search a company")).toHaveValue("5");
+    await expect(page).toHaveURL(/\/Earnings-Watch\/$/);
+  });
+
+  test("/ searches, ? lists the shortcuts, digits wait while the list is open, Esc closes it", async ({ page }) => {
+    await open(page);
+    await page.keyboard.press("/");
+    await expect(page.getByLabel("Search a company")).toBeFocused();
+    await page.locator("body").click({ position: { x: 5, y: 300 } });
+    await page.keyboard.press("?");
+    await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeVisible();
+    await page.keyboard.press("4");
+    await expect(page).toHaveURL(/\/Earnings-Watch\/$/);
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toBeHidden();
+  });
+});
+
+test.describe("themes", () => {
+  test("paper by default, even when the system prefers dark", async ({ browser }) => {
+    const context = await browser.newContext({ colorScheme: "dark" });
+    const page = await context.newPage();
+    await page.goto("http://localhost:4173/Earnings-Watch/");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await context.close();
+  });
+
+  test("the terminal theme, once chosen, is remembered", async ({ page }) => {
+    await open(page);
+    await page.getByRole("button", { name: "Terminal" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("data-ready", "true");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(page.getByRole("button", { name: "Paper" })).toBeVisible();
+  });
+
+  test("with storage blocked, the site still opens, in paper", async ({ browser }) => {
+    const context = await browser.newContext();
+    await context.addInitScript(() => {
+      Object.defineProperty(window, "localStorage", { get: () => { throw new Error("blocked"); } });
+    });
+    const page = await context.newPage();
+    const problems = watch(page);
+    await open(page, "http://localhost:4173/Earnings-Watch/");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await page.getByRole("button", { name: "Terminal" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    expect(problems).toEqual([]);
+    await context.close();
+  });
+});
+
+test("dates are shown in UTC, wherever the visitor is", async ({ browser }) => {
+  const context = await browser.newContext({ timezoneId: "America/New_York" });
+  const page = await context.newPage();
+  await page.goto("http://localhost:4173/Earnings-Watch/");
+  await expect(page.locator(".status")).toContainText("2026-09-30");
+  await expect(page.locator(".status")).toContainText("06:05 UTC");
+  await expect(page.locator("tbody tr").first().locator("td").last()).toHaveText("2026-09-30");
+  await context.close();
+});
+
+test("with reduced motion, the query does not type itself", async ({ browser }) => {
+  const context = await browser.newContext({ reducedMotion: "reduce" });
+  const page = await context.newPage();
+  await page.goto("http://localhost:4173/Earnings-Watch/");
+  const animation = await page.locator(".typed").evaluate((el) => getComputedStyle(el).animationName);
+  expect(animation).toBe("none");
+  await context.close();
+});

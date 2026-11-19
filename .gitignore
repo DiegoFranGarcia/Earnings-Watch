@@ -42,3 +42,11 @@ build/
 
 # Terraform variables that stay off GitHub (an email address)
 private.auto.tfvars
+
+# The site (site/): dependencies, builds, the fixture export and test output are never committed.
+site/node_modules/
+site/.svelte-kit/
+site/build/
+site/fixture/
+site/test-results/
+site/playwright-report/

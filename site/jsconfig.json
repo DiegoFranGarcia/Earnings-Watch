@@ -1,0 +1,5 @@
+{
+  "extends": "$app/tsconfig",
+  "include": ["src", "tests", "*"],
+  "compilerOptions": { "allowJs": true, "checkJs": true, "strict": true }
+}
