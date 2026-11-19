@@ -230,15 +230,17 @@ and `QUERY_ATTRIBUTION_HISTORY` group credits by them.
 
 ## The public site
 
-**What runs.** After every `dbt_build` that passes, `publish_site` exports the dbt docs to
-`exports/site/runs/<run>/` and points `exports/site/current.json` at them, then starts the
-`Site` workflow (`.github/workflows/site.yml`). The workflow checks every file against the
-export's manifest and deploys to GitHub Pages: <https://diegofrangarcia.github.io/Earnings-Watch/>.
-It also runs daily at 10:30 UTC, and when `site.yml` or `scripts/build_site.py` changes on main.
-See ADR 17.
+**What runs.** After every `dbt_build` that passes, `publish_site` exports the dbt docs and the
+site's seven tables (Parquet) to `exports/site/runs/<run>/` and points
+`exports/site/current.json` at them, then starts the `Site` workflow (`.github/workflows/site.yml`).
+Its three jobs: `export` (role `gha-site`) checks every file against the export's manifest;
+`app`, with no credentials, builds the site's app (`site/`) from that export and puts it beside
+the export's files; `deploy` publishes to GitHub Pages:
+<https://diegofrangarcia.github.io/Earnings-Watch/>. It also runs daily at 10:30 UTC, and when
+`site.yml`, `scripts/build_site.py` or anything in `site/` changes on main. See ADR 17 and 19.
 
-**Check it.** The landing page shows when its data was exported; `site.json` says which export
-is live:
+**Check it.** Every page's status line shows the latest quarter in the data and when the export
+ran; `site.json` says which export is live:
 
 ~~~bash
 curl -s https://diegofrangarcia.github.io/Earnings-Watch/site.json
@@ -253,7 +255,8 @@ aws s3 ls "s3://$LAKE_BUCKET/exports/site/runs/"                       # the exp
 gh workflow run site.yml -f export=exports/site/runs/<run>            # roll back to that one
 ~~~
 
-A rollback lasts until the next export or the next scheduled run deploys the latest again.
+A rollback lasts until the next export or the next scheduled run deploys the latest again. Only
+exports that hold all seven tables can be deployed: none from before 2026-11-19.
 
 **Publish by hand** (the same code the DAG runs; your AWS session and dbt profile):
 
@@ -265,9 +268,12 @@ PYTHONPATH=airflow/dags uv run python -m earningswatch.site_export --bucket "$LA
 deploys it. The usual cause is the token: `GitHub answered 401` means it expired or was
 revoked; rotate it (below). `403` means it lacks Actions: write on this repository.
 
-**If the Site workflow failed:** its log says why. `NOT DEPLOYED: ...` means the export did not
-match its manifest, or listed a file the site's layout does not know; the live site is
-unchanged. A file over the 20 MB budget stops the export itself, in `publish_site`.
+**If the Site workflow failed:** its log says why, and the live site is unchanged.
+`NOT DEPLOYED: ...` in `export` means the export did not match its manifest, lacked a table, or
+listed a file the site's layout does not know; in `app`, that the app's build would have replaced
+one of the export's files. A failed `npm run build` usually means the export and the app disagree
+about a table: the `site` check on pull requests builds the same app against a fixture with the
+contract's shape. A file over the 20 MB budget stops the export itself, in `publish_site`.
 
 **If the scheduled runs stopped:** GitHub disables a public repository's schedules after 60
 days without activity. `gh workflow enable site.yml` turns it back on.

@@ -5,7 +5,13 @@ has exactly the columns and types its dbt contract declares (dbt/models/exports/
 so a contract change that the site has not caught up with fails the build, not the live site.
 Company names are invented ("Fixture Co 01") so nothing here can be mistaken for real figures.
 
+It writes what build_site.py lays out from a real export (data/, dbt-docs/, site.json), so the
+app's build can be added beside it as the deploy does, and tested where it will be served:
+
     uv run python scripts/make_site_fixture.py --out site/fixture
+    cd site && EW_DATA_DIR=fixture npm run build
+    python3 ../scripts/build_site.py --add-app build --out fixture
+    npm test
 """
 
 from __future__ import annotations
@@ -16,6 +22,7 @@ import decimal
 import json
 import random
 import re
+import shutil
 from pathlib import Path
 
 import pyarrow as pa
@@ -239,10 +246,26 @@ def rows(rng: random.Random) -> dict[str, list[dict]]:
     return out
 
 
+def is_fixture(folder: Path) -> bool:
+    try:
+        return json.loads((folder / "site.json").read_text()).get("run_id") == "fixture"
+    except (OSError, ValueError):
+        return False
+
+
 def write(out_dir: Path) -> dict[str, int]:
+    """A fresh fixture in out_dir, replacing an earlier fixture (and any app added to it)."""
+    if out_dir.exists():
+        if any(out_dir.iterdir()) and not is_fixture(out_dir):
+            raise SystemExit(f"{out_dir} is not empty and not a fixture: not replacing it")
+        shutil.rmtree(out_dir)
     # Seeded, so the fixture is identical every time; invented numbers, not a secret.
     shapes, data = contract(), rows(random.Random(20261119))  # noqa: S311
-    (out_dir / "data").mkdir(parents=True, exist_ok=True)
+    (out_dir / "data").mkdir(parents=True)
+    (out_dir / "dbt-docs").mkdir()
+    (out_dir / "dbt-docs" / "index.html").write_text(
+        "<!doctype html>\n<title>dbt docs (fixture)</title>\n<p>The dbt docs stand-in.</p>\n"
+    )
     counts = {}
     for name, columns in shapes.items():
         schema = pa.schema(columns)

@@ -39,6 +39,17 @@ test("every page loads under the base path, cleanly, with its tab marked current
   expect(problems).toEqual([]);
 });
 
+test("the dbt docs and the data sit beside the app, under the same base path", async ({ page, request }) => {
+  await open(page);
+  const docs = page.getByRole("link", { name: "dbt docs" });
+  await expect(docs).toHaveAttribute("href", "/Earnings-Watch/dbt-docs/");
+  await docs.click();
+  await expect(page).toHaveTitle("dbt docs (fixture)");
+  for (const file of ["site.json", "data/export_screener.parquet"]) {
+    expect((await request.get(file)).status(), file).toBe(200);
+  }
+});
+
 test("the answer is in the page before any JavaScript runs", async ({ browser }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
