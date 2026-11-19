@@ -1,7 +1,8 @@
 """Publish what the public site shows: one folder per run, then one pointer to it.
 
-Each run writes its files to exports/site/runs/<run>/, then manifest.json beside them (every
-file's size and sha256, the run, the time, the release), and only then exports/site/current.json,
+Each run writes its files to exports/site/runs/<run>/ (the dbt docs, and each table the pages
+read as ZSTD Parquet), then manifest.json beside them (every file's size and sha256, each
+table's row count, the run, the time, the release), and only then exports/site/current.json,
 a copy of that manifest. The site workflow (.github/workflows/site.yml) reads current.json first,
 so it always finds a complete export: a run's folder never changes once written, and switching to
 a new one is a single PUT. A run that fails halfway leaves current.json, and the site, as they were.
@@ -29,6 +30,19 @@ POINTER_KEY = f"{PREFIX}/current.json"
 FILE_BUDGET_BYTES = 20 * 1024 * 1024  # a page loads in the browser: no file may be bigger
 DOCS_FILE = "dbt-docs.html"
 SITE_WORKFLOW = "site.yml"
+# The tables the pages read (dbt models/exports), and how they are read: as REPORTER, which
+# can only read MARTS, on its own warehouse, so the site's cost is its own line.
+EXPORT_MODELS = (
+    "export_screener",
+    "export_company_quarters",
+    "export_company_history",
+    "export_restatements_by_year",
+    "export_restatements_largest",
+    "export_filing_timeliness",
+    "export_pipeline_health",
+)
+SITE_ROLE = "REPORTER"
+SITE_WAREHOUSE = "WH_REPORTING"
 GITHUB_API = "https://api.github.com"
 CONTENT_TYPES = {".html": "text/html; charset=utf-8", ".json": "application/json",
                  ".parquet": "application/vnd.apache.parquet"}  # fmt: skip
@@ -40,6 +54,10 @@ class ExportTooLarge(Exception):
 
 class DispatchFailed(Exception):
     """GitHub did not accept the request to run the site workflow."""
+
+
+class ExportIncomplete(Exception):
+    """A table's Parquet file does not hold every row of the table: nothing is published."""
 
 
 def run_folder(run_id: str) -> str:
@@ -80,10 +98,54 @@ def generate_dbt_docs(
     return docs
 
 
-def publish(s3, bucket: str, run_id: str, files: list[Path], release: str, now=None) -> dict:
-    """Upload the files to the run's folder, then its manifest, then the pointer: in that order."""
+def export_tables(conn, database: str, out_dir: Path, models=EXPORT_MODELS) -> dict[Path, int]:
+    """Write each export model to a ZSTD Parquet file, with lower-case columns; return the rows.
+
+    Each file is read back and its row count compared with count(*) of the table, so a short
+    read or write stops the export instead of publishing part of a table.
+    """
+    import pyarrow.parquet as pq
+
+    if not re.fullmatch(r"[A-Za-z0-9_]+", database):
+        raise ValueError(f"not a database name: {database!r}")
+    written = {}
+    for model in models:
+        if not re.fullmatch(r"[a-z0-9_]+", model):
+            raise ValueError(f"not a model name: {model!r}")
+        relation = f"{database}.MARTS.{model}"  # both names checked above: no injection
+        cursor = conn.cursor()
+        try:
+            cursor.execute(f"select count(*) from {relation}")  # noqa: S608
+            expected = cursor.fetchone()[0]
+            cursor.execute(f"select * from {relation}")  # noqa: S608
+            table = cursor.fetch_arrow_all(force_return_table=True)
+        finally:
+            cursor.close()
+        table = table.rename_columns([name.lower() for name in table.column_names])
+        path = out_dir / f"{model}.parquet"
+        pq.write_table(table, path, compression="zstd")
+        rows = pq.ParquetFile(path).metadata.num_rows
+        if rows == 0 or not expected == table.num_rows == rows:
+            raise ExportIncomplete(
+                f"{model}: {expected:,} rows in Snowflake, {table.num_rows:,} read, "
+                f"{rows:,} written"
+            )
+        written[path] = rows
+    return written
+
+
+def publish(
+    s3, bucket: str, run_id: str, files: list[Path], release: str, now=None, rows=None
+) -> dict:
+    """Upload the files to the run's folder, then its manifest, then the pointer: in that order.
+
+    rows maps a table's file to its row count, recorded in the manifest beside the file.
+    """
     now = now or datetime.datetime.now(datetime.UTC)
     entries = [describe(path) for path in files]
+    for path, entry in zip(files, entries, strict=True):
+        if rows and path in rows:
+            entry["rows"] = rows[path]
     too_big = [e for e in entries if e["bytes"] > FILE_BUDGET_BYTES]
     if too_big:
         raise ExportTooLarge(
@@ -165,6 +227,12 @@ def main(argv: list[str] | None = None) -> int:
                         "earningswatch/dev/github-dispatch-token"))  # fmt: skip
     parser.add_argument("--repository", default=os.environ.get("SITE_GITHUB_REPOSITORY",
                         "DiegoFranGarcia/Earnings-Watch"))  # fmt: skip
+    # Snowflake, as SVC_AIRFLOW with its own key (read as REPORTER, like the DAG).
+    parser.add_argument("--sf-account", default=os.environ.get("SF_ACCOUNT", "TOHCGIQ-QM22072"))
+    parser.add_argument("--sf-user", default=os.environ.get("SF_USER", "SVC_AIRFLOW"))
+    parser.add_argument("--sf-key", default=os.environ.get("SF_PRIVATE_KEY_PATH",
+                        "~/.snowflake/keys/svc_airflow_rsa_key.p8"))  # fmt: skip
+    parser.add_argument("--sf-database", default=os.environ.get("SF_DATABASE", "EARNINGSWATCH_DEV"))
     args = parser.parse_args(argv)
     if not args.bucket:
         parser.error("--bucket (or LAKE_BUCKET) is required")
@@ -180,14 +248,28 @@ def main(argv: list[str] | None = None) -> int:
         text=True,
     )
     release = f"local:{commit.stdout.strip() or 'unknown'}"
+    from earningswatch import snowflake_load
+
     with tempfile.TemporaryDirectory(prefix="earningswatch-site-") as tmp:
+        conn = snowflake_load.connect(
+            args.sf_account, args.sf_user, args.sf_key, args.sf_database,
+            f"earningswatch:site:{run_id}",
+            role=SITE_ROLE, warehouse=SITE_WAREHOUSE, schema="MARTS",
+        )  # fmt: skip
+        try:
+            tables = export_tables(conn, args.sf_database, Path(tmp))
+        finally:
+            conn.close()
         docs = generate_dbt_docs(args.dbt, args.project_dir, Path(tmp), run_id)
-        manifest = publish(boto3.client("s3"), args.bucket, run_id, [docs], release, now)
+        manifest = publish(
+            boto3.client("s3"), args.bucket, run_id, [docs, *tables], release, now, rows=tables
+        )
     # dbt has already written its own output to stdout: end with a short summary, not JSON.
     # The full manifest is exports/site/current.json.
     print(f"published {manifest['folder']} ({POINTER_KEY} points at it):")
     for entry in manifest["files"]:
-        print(f"  {entry['name']}: {entry['bytes']:,} bytes, sha256 {entry['sha256'][:12]}")
+        rows = f", {entry['rows']:,} rows" if "rows" in entry else ""
+        print(f"  {entry['name']}: {entry['bytes']:,} bytes{rows}, sha256 {entry['sha256'][:12]}")
     if args.dispatch:
         token = read_token(boto3.client("secretsmanager", region_name="us-east-1"), args.secret_id)
         run_url = dispatch_site_workflow(token, args.repository, manifest["folder"])

@@ -3,9 +3,10 @@
 Triggered by the marts asset, which dbt_build updates only after its volume gate, every model and
 every test passed: the site can never show data the circuit breaker held back (ADR 10).
 
-1. export: generate the dbt docs (one static HTML file, with the catalog: ADR 18) and publish
-   them as this run's export: the run's folder, its manifest, then exports/site/current.json
-   (earningswatch.site_export). Stage 9 adds the dashboard's Parquet files to the same export.
+1. export: write each table the pages read (dbt models/exports) to ZSTD Parquet, reading as
+   REPORTER on WH_REPORTING; generate the dbt docs (one static HTML file, with the catalog:
+   ADR 18); publish both as this run's export: the run's folder, its manifest (with each
+   table's row count), then exports/site/current.json (earningswatch.site_export).
 2. trigger_site_deploy: start .github/workflows/site.yml, which builds the site from that export
    and deploys it to GitHub Pages. If this fails, the export is still published and the
    workflow's daily schedule deploys it; the failure alerts anyway, because an expired token
@@ -54,28 +55,40 @@ DBT_EXECUTABLE = os.environ.get("DBT_EXECUTABLE", "/opt/dbt_venv/bin/dbt")
 def publish_site():
     @task(pool="snowflake", execution_timeout=timedelta(minutes=20))
     def export(**context) -> dict:
-        """The dbt docs, published as this run's export; the pointer is written last."""
+        """The tables and the dbt docs, published as this run's export; the pointer goes last."""
         import tempfile
 
         import boto3
 
-        from earningswatch import site_export
+        from earningswatch import site_export, snowflake_load
         from earningswatch.config import load_settings
 
         settings = load_settings()
+        run_id = context["run_id"]
         with tempfile.TemporaryDirectory(prefix="earningswatch-site-") as tmp:
-            docs = site_export.generate_dbt_docs(
-                DBT_EXECUTABLE, DBT_PROJECT, Path(tmp), context["run_id"]
+            conn = snowflake_load.connect_from_settings(
+                settings,
+                f"earningswatch:site:{run_id}",
+                role=site_export.SITE_ROLE,
+                warehouse=site_export.SITE_WAREHOUSE,
+                schema="MARTS",
             )
+            try:
+                tables = site_export.export_tables(conn, settings.sf_database, Path(tmp))
+            finally:
+                conn.close()
+            docs = site_export.generate_dbt_docs(DBT_EXECUTABLE, DBT_PROJECT, Path(tmp), run_id)
             manifest = site_export.publish(
                 boto3.client("s3"),
                 settings.lake_bucket,
-                context["run_id"],
-                [docs],
+                run_id,
+                [docs, *tables],
                 release=os.environ.get("AIRFLOW_IMAGE", "unknown"),
+                rows=tables,
             )
         for entry in manifest["files"]:
-            print(f"{entry['key']}: {entry['bytes']:,} bytes, sha256 {entry['sha256']}")
+            rows = f", {entry['rows']:,} rows" if "rows" in entry else ""
+            print(f"{entry['key']}: {entry['bytes']:,} bytes{rows}, sha256 {entry['sha256']}")
         print(f"{site_export.POINTER_KEY} now points at {manifest['folder']}")
         return {"folder": manifest["folder"], "exported_at": manifest["exported_at"]}
 
