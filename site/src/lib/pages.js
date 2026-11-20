@@ -2,7 +2,12 @@
 // SvelteKit route ID: it says which tab is current even while a page is being prerendered.
 import { resolve } from "$app/paths";
 
-/** @type {{ route: import("$app/types").RouteId, label: string }[]} */
+/**
+ * A route without parameters (a company's page is reached through link("/company") + its CIK).
+ * @typedef {Exclude<import("$app/types").RouteId, `${string}[${string}`>} Route
+ */
+
+/** @type {{ route: Route, label: string }[]} */
 export const PAGES = [
   { route: "/", label: "Overview" },
   { route: "/screener", label: "Screener" },
@@ -14,7 +19,7 @@ export const PAGES = [
 ];
 
 /** A page's URL, under the base path and ending in a slash, as GitHub Pages serves folders. */
-export function link(/** @type {import("$app/types").RouteId} */ route) {
+export function link(/** @type {Route} */ route) {
   const url = resolve(route);
   return url.endsWith("/") ? url : `${url}/`;
 }

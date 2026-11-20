@@ -10,7 +10,8 @@ models:
       Grain: one row per company and reporting view (first_reported or latest), at the
       company's most recent screened quarter, among companies whose latest screened quarter
       became knowable within var site_recent_months of the build. With the current company
-      name, its SEC industry (sic_codes) and filer size (filer_group, from filing_deadlines).
+      name, its SEC industry (stg_sec__sic_codes) and filer size (filer_group, from
+      filing_deadlines).
     config:
       contract:
         enforced: true
@@ -41,7 +42,7 @@ models:
           # A code the SEC's list lacks is a filer data problem: it warns (ADR 8).
           - relationships:
               arguments:
-                to: ref('sic_codes')
+                to: ref('stg_sec__sic_codes')
                 field: sic
               config:
                 severity: warn
@@ -67,10 +68,18 @@ models:
       - name: is_flagged
         data_type: boolean
         data_tests: [not_null]
+      - name: is_implausible
+        description: >
+          Net income or operating cash flow over the year above var
+          implausible_multiple_of_assets times average total assets: usually a units mistake.
+        data_type: boolean
+        data_tests: [not_null]
       - name: company_name
         data_type: varchar
       - name: industry_group
-        description: The SEC office that reviews the industry, without "Office of"; Unknown if none.
+        description: >
+          The SEC office that reviews the industry, as a plain name (stg_sec__sic_codes);
+          Unknown if none.
         data_type: varchar
         data_tests: [not_null]
       - name: filer_group

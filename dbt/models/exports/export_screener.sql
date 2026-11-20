@@ -32,7 +32,7 @@ filer_groups as (
 ),
 
 industries as (
-    select * from {{ ref('sic_codes') }}
+    select * from {{ ref('stg_sec__sic_codes') }}
 )
 
 select
@@ -53,9 +53,18 @@ select
     latest.accruals,
     latest.accruals_to_assets,
     latest.is_flagged,
+    -- Figures no ordinary company reports, usually a units mistake in the filing: shown with a
+    -- warning, not dropped (ADR 8; warn_screener_figures_look_implausible lists them).
+    coalesce(
+        abs(latest.ttm_net_income)
+        > {{ var('implausible_multiple_of_assets') }} * latest.average_total_assets
+        or abs(latest.ttm_operating_cash_flow)
+        > {{ var('implausible_multiple_of_assets') }} * latest.average_total_assets,
+        false
+    ) as is_implausible,
     -- The current name, so a renamed company is shown as it is known today.
     coalesce(companies.company_name, latest.company_name) as company_name,
-    coalesce(regexp_replace(industries.office, '^Office of ', ''), 'Unknown') as industry_group,
+    coalesce(industries.industry_group, 'Unknown') as industry_group,
     coalesce(filer_groups.filer_group, 'unknown') as filer_group,
     latest.cik || '|' || latest.reporting_view as screener_key
 from latest

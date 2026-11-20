@@ -16,6 +16,7 @@
     SORTS,
     filterRows,
     parseState,
+    prepare,
     sortRows,
     toRow,
     toSearch,
@@ -35,21 +36,31 @@
 
   const matching = $derived(rows ? sortRows(filterRows(rows, s), s.sort, s.dir) : data.first);
   // The chart shows every company the other choices allow, so an area can be chosen among them.
-  const charted = $derived(rows ? filterRows(rows, { ...s, growth: null, gap: null }) : null);
-  const universe = $derived(data.summary[s.view].universe);
+  const charted = $derived(rows ? filterRows(rows, { ...s, change: null, gap: null }) : null);
+  const summary = $derived(data.summary[s.view]);
+  const universe = $derived(summary.universe + (s.behind ? summary.behind : 0));
   const changed = $derived(toSearch(s) !== "");
 
-  /** @type {Record<string, string>} */
+  /** The table's columns, each sortable. @type {Record<string, string>} */
   const HEADERS = {
     name: "Company",
     industry: "Industry",
     filer: "Filer size",
     ni: "Net income",
-    growth: "Growth",
+    change: "Income change / assets",
     cash: "Operating cash",
+    accruals: "Gap",
     gap: "Gap / assets",
-    quarter: "Quarter",
+    quarter: "Latest quarter",
   };
+  /** @type {[string, string][]} */
+  const ORDERS = [
+    ["flagged desc", "Flagged first, largest gap"],
+    ...Object.entries(HEADERS).flatMap(([key, label]) => [
+      /** @type {[string, string]} */ ([`${key} desc`, `${label}, high to low`]),
+      /** @type {[string, string]} */ ([`${key} asc`, `${label}, low to high`]),
+    ]),
+  ];
 
   onMount(() => {
     s = parseState(new URL(location.href).searchParams);
@@ -58,7 +69,7 @@
       try {
         const response = await fetch(`${link("/")}data/export_screener.parquet`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        rows = (await readParquet(await response.arrayBuffer())).map(toRow);
+        rows = prepare((await readParquet(await response.arrayBuffer())).map(toRow)).rows;
       } catch {
         failed = true;
       }
@@ -94,9 +105,10 @@
   <header class="head">
     <h1>Screener</h1>
     <p class="prose lede">
-      Every company still filing that the screen covers, at its latest quarter: trailing twelve
-      months against the twelve before. Filter and sort the table, or drag across the chart to
-      keep the companies in one area. The address keeps your choices, so you can share them.
+      Every company the screen covers, at its latest quarter: trailing twelve months against the
+      twelve before. Flagged companies come first, largest gap between income and cash (in
+      dollars) first. Filter and sort the table, or drag across the chart to keep the companies in
+      one area. The address keeps your choices, so you can share them.
     </p>
   </header>
 
@@ -118,16 +130,17 @@
       {#each FILERS as [value, label] (value)}<option {value}>{label}</option>{/each}
     </select>
     <label class="check"><input type="checkbox" disabled={!rows} bind:checked={s.flagged} /> Flagged only</label>
+    <label class="check">
+      <input type="checkbox" disabled={!rows} bind:checked={s.behind} />
+      Include {count(summary.behind)} behind on filings
+    </label>
     <label class="visually-hidden" for="screener-sort">Sort by</label>
     <select id="screener-sort" class="show-sm" disabled={!rows} value={`${s.sort} ${s.dir}`} onchange={(e) => {
       const [sort, dir] = e.currentTarget.value.split(" ");
       s.sort = sort;
       s.dir = /** @type {"asc" | "desc"} */ (dir);
     }}>
-      {#each Object.entries(HEADERS) as [key, label] (key)}
-        <option value="{key} desc">{label}, high to low</option>
-        <option value="{key} asc">{label}, low to high</option>
-      {/each}
+      {#each ORDERS as [value, label] (value)}<option {value}>{label}</option>{/each}
     </select>
     {#if changed}
       <button class="clear" type="button" onclick={() => (s = { ...DEFAULT })}>Clear filters</button>
@@ -136,10 +149,10 @@
 
   <ScreenerScatter
     rows={charted}
-    selection={{ growth: s.growth, gap: s.gap }}
+    selection={{ change: s.change, gap: s.gap }}
     {hovered}
     onselect={(area) => {
-      s.growth = area?.growth ?? null;
+      s.change = area?.change ?? null;
       s.gap = area?.gap ?? null;
     }}
   />
@@ -148,9 +161,9 @@
     {#if failed}
       The full table could not load. Showing the first {count(data.first.length)} companies; reload to try again.
     {:else if rows}
-      {count(matching.length)} of {count(universe)} companies{#if s.growth || s.gap}, in the selected area{/if}
+      {count(matching.length)} of {count(universe)} companies{#if s.change || s.gap}, in the selected area{/if}
     {:else}
-      The first {count(data.first.length)} of {count(universe)} companies, largest gap first. Loading the rest.
+      The first {count(data.first.length)} of {count(universe)} companies, flagged first. Loading the rest.
     {/if}
   </p>
 
@@ -172,23 +185,26 @@
           {@const cashChange = r.cash != null && r.cashPrior != null ? r.cash - r.cashPrior : null}
           <tr onmouseenter={() => (hovered = r.cik)} onmouseleave={() => (hovered = null)}>
             <td data-label="Company">
-              <a class="co" href="{link("/company")}?cik={r.cik}">{r.name}</a>
-              {#if r.flagged}<span class="flag">Flagged</span>{/if}
+              <a class="co" href="{link("/company")}{r.cik}/">{r.name}</a>
+              {#if r.flagged}<span class="tag flag">Flagged</span>{/if}
+              {#if r.implausible}<span class="tag check" title="Net income or operating cash flow above twice total assets: usually a units mistake in the filing">Check filing</span>{/if}
+              {#if r.behind}<span class="tag" title="Latest quarter more than two quarters before most companies' ({data.through})">Behind on filings</span>{/if}
             </td>
             <td data-label="Industry"><span>{r.industry}</span></td>
             <td data-label="Filer size"><span>{FILER_LABELS[r.filer] ?? r.filer}</span></td>
             <td data-label="Net income"><span>{money(r.ni)}</span></td>
-            <td data-label="Growth" class={r.growth == null ? "" : r.growth >= 0 ? "up" : "down"}>
-              <span>{r.growth == null ? "—" : `${r.growth >= 0 ? "+" : "−"}${percent(Math.abs(r.growth), 0)}`}</span>
+            <td data-label="Income change / assets" class={r.change == null ? "" : r.change >= 0 ? "up" : "down"}>
+              <span>{r.change == null ? "—" : `${r.change >= 0 ? "+" : "−"}${percent(Math.abs(r.change))}`}</span>
             </td>
             <td data-label="Operating cash">
               <span>{money(r.cash)}{#if cashChange != null}<span class="chg {cashChange >= 0 ? "up" : "down"}">{moneyChange(cashChange)}</span>{/if}</span>
             </td>
+            <td data-label="Gap"><span>{money(r.accruals)}</span></td>
             <td data-label="Gap / assets"><span>{percent(r.gap)}</span></td>
-            <td data-label="Quarter"><span>{r.quarter}</span></td>
+            <td data-label="Latest quarter"><span>{r.quarter}<span class="filed">filed {r.filed}</span></span></td>
           </tr>
         {:else}
-          <tr><td colspan="8" class="empty prose">No company matches. Clear a filter, or the selected area, to see more.</td></tr>
+          <tr><td colspan="9" class="empty prose">No company matches. Clear a filter, or the selected area, to see more.</td></tr>
         {/each}
       </tbody>
     </table>
@@ -199,9 +215,11 @@
     </button>
   {/if}
   <p class="foot muted prose">
-    Growth is shown only from a positive base. Flagged: net income up on a year ago, operating cash
-    flow not, and the gap above 10% of total assets. A screen for where to look harder, not
-    investment advice.
+    Gap: net income minus operating cash flow, over the trailing twelve months. Flagged: net income
+    up on a year ago, operating cash flow not, and the gap above 10% of total assets. Check filing:
+    net income or operating cash flow above twice total assets, usually a units mistake in the
+    filing. Behind on filings: latest quarter more than two quarters before most companies'
+    ({data.through}). A screen for where to look harder, not investment advice.
   </p>
 </main>
 
@@ -209,7 +227,7 @@
   .head { padding: 40px 0 8px; }
   h1 { font-size: clamp(28px, 4.4vw, 44px); margin: 0 0 10px; letter-spacing: -0.015em; font-weight: 600; }
   .lede { color: var(--muted); max-width: 70ch; margin: 0 0 20px; }
-  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 16px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 0 0 16px; }
   .viewtoggle { display: inline-flex; border: 1px solid var(--rule); }
   .viewtoggle button {
     font: inherit; font-size: 13px; background: none; color: var(--muted); border: 0;
@@ -230,21 +248,22 @@
   .count { font-size: 13px; color: var(--muted); margin: 0 0 8px; }
   .tablewrap { border: 1px solid var(--rule); overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
-  th { position: sticky; top: 0; background: var(--panel); border-bottom: 1px solid var(--rule); text-align: right; }
+  th { position: sticky; top: 0; background: var(--panel); border-bottom: 1px solid var(--rule); text-align: right; vertical-align: bottom; }
   th button {
     font: inherit; font-weight: 500; color: var(--muted); background: none; border: 0;
-    padding: 6px 8px; cursor: pointer; white-space: nowrap; width: 100%; text-align: inherit;
+    padding: 6px 8px; cursor: pointer; width: 100%; text-align: inherit;
   }
   th[aria-sort] button { color: var(--accent); }
   .arrow { display: inline-block; width: 1.2em; font-size: 10px; text-align: center; }
   td { text-align: right; padding: 4px 8px; white-space: nowrap; line-height: 1.35; }
   th:nth-child(-n + 3), td:nth-child(-n + 3) { text-align: left; }
+  td:first-child { white-space: normal; min-width: 16ch; }
   tbody tr:nth-child(odd) { background: var(--band); }
   tbody tr:hover { outline: 1px solid var(--accent-dim); outline-offset: -1px; }
   .chg { margin-left: 6px; }
+  .filed { display: block; font-size: 11px; color: var(--muted); }
   .co { color: var(--text); text-decoration: none; }
   .co:hover { color: var(--accent); text-decoration: underline; }
-  .flag { margin-left: 6px; font-size: 11px; color: var(--accent); border: 1px solid var(--accent-dim); padding: 0 4px; }
   .empty { text-align: left; color: var(--muted); padding: 14px 12px; white-space: normal; }
   .more { margin-top: 10px; }
   .foot { font-size: 12.5px; margin: 18px 0 40px; max-width: 80ch; }
@@ -261,6 +280,7 @@
     td::before { content: attr(data-label); color: var(--muted); text-align: left; }
     td:first-child { display: block; text-align: left !important; font-size: 14px; margin-bottom: 4px; }
     td:first-child::before { content: none; }
+    .filed { display: inline; margin-left: 6px; }
     .empty::before { content: none; }
   }
 </style>

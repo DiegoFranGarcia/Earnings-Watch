@@ -55,7 +55,7 @@ test("the answer is in the page before any JavaScript runs", async ({ browser })
   const page = await context.newPage();
   await page.goto("http://localhost:4173/Earnings-Watch/");
   await expect(page.getByTestId("flagged")).toHaveText("9");
-  await expect(page.getByTestId("universe")).toHaveText("40");
+  await expect(page.getByTestId("universe")).toHaveText("39");
   await expect(page.getByTestId("view-name")).toHaveText("after restatements");
   await context.close();
 });

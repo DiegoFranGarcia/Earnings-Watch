@@ -1,6 +1,16 @@
 version: 2
 
 models:
+  - name: stg_sec__sic_codes
+    description: >
+      Grain: one row per SIC code (seed sic_codes), with industry_group: the reviewing office as
+      a plain name, the first one named for a code shared by two offices.
+    columns:
+      - name: sic
+        data_tests: [unique, not_null]
+      - name: industry_group
+        data_tests: [not_null]
+
   - name: stg_sec__submissions
     description: "Grain: one row per filing (accession number)."
     columns:

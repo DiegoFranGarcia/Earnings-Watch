@@ -53,3 +53,11 @@ main { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
 @media (max-width: 760px) {
   .hide-sm { display: none; }
 }
+/* Labels beside a company's name: flagged; check the filing (implausible figures); behind on
+   filings. Not red or green: those mean down and up. */
+.tag {
+  margin-left: 6px; font-size: 11px; padding: 0 4px; border: 1px solid var(--rule);
+  color: var(--muted); white-space: nowrap; font-family: "IBM Plex Mono", ui-monospace, monospace;
+}
+.tag.flag { color: var(--accent); border-color: var(--accent-dim); }
+.tag.check { color: var(--text); border: 1px dashed var(--text); }
