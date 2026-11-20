@@ -75,3 +75,20 @@ seeds:
         data_tests: [not_null]
       - name: industry_title
         data_tests: [not_null]
+
+  - name: sec_closed_days
+    description: >
+      The weekdays EDGAR accepted no filings: federal holidays on the days observed (5 U.S.C.
+      6103; Juneteenth from 2021; not Inauguration Day, when EDGAR stayed open) from 1993, and
+      the other days the SEC treated as holidays for filing purposes (executive orders closing
+      the government, national days of mourning) from 2009, each with its source. A deadline
+      on one of these days, or a weekend, moves to the next business day (Exchange Act Rule
+      0-3). Written by scripts/make_sec_closed_days.py, which is checked against OPM's holiday
+      lists and the SEC's EDGAR calendar; extend it each year (warn_sec_closed_days_run_out).
+    columns:
+      - name: closed_date
+        data_tests: [unique, not_null]
+      - name: reason
+        data_tests: [not_null]
+      - name: source
+        data_tests: [not_null]

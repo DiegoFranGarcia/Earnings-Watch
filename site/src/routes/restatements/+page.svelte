@@ -16,6 +16,7 @@
     METRIC_LABELS,
     ORDERS,
     PHASE_IN,
+    awaitingFigures,
     barValue,
     filterRestatements,
     headline,
@@ -42,6 +43,7 @@
   const matching = $derived(rows ? sortRestatements(filterRestatements(rows, s), s.order) : data.first);
   const kinds = $derived(KINDS.filter(([kind]) => s.tags || kind !== "tag_switch"));
   const changed = $derived(toSearch(s) !== "");
+  const awaiting = $derived(awaitingFigures(data.byYear));
 
   onMount(() => {
     s = parseState(new URL(location.href).searchParams);
@@ -86,8 +88,10 @@
           in a later filing.
         </p>
         <p class="def">
-          <span data-testid="companies">{count(opening.companies)}</span> companies changed a
-          net income figure they had reported{#if opening.reporting}, of {count(opening.reporting)} reporting one that year{/if}.
+          {#if !awaiting}
+            <span data-testid="companies">{count(opening.companies)}</span> companies changed a
+            net income figure they had reported{#if opening.reporting}, of {count(opening.reporting)} reporting one that year{/if}.
+          {/if}
           {#if opening.days != null}The median amendment came {count(Math.round(opening.days))} days after the figure first appeared.{/if}
         </p>
       </div>
@@ -126,46 +130,52 @@
 
   <section>
     <h2>Companies that changed {figure} they had reported, each year</h2>
-    <RestatementsChart
-      {years}
-      tags={s.tags}
-      counts={s.counts}
-      label={s.counts ? "companies" : `% of companies reporting ${figure}`}
-      selected={s.year}
-      current={data.fullYear + 1}
-      onselect={(year) => (s.year = year)}
-    />
+    {#if awaiting}
+      <p class="awaiting prose muted" data-testid="awaiting">These figures arrive with the next data export.</p>
+    {:else}
+      <RestatementsChart
+        {years}
+        tags={s.tags}
+        counts={s.counts}
+        label={s.counts ? "companies" : `% of companies reporting ${figure}`}
+        selected={s.year}
+        current={data.fullYear + 1}
+        onselect={(year) => (s.year = year)}
+      />
+    {/if}
     <p class="note prose muted">
       Each company counted once a year, under its first kind of change. Shaded: {PHASE_IN[0]} to
       {PHASE_IN[1]}, when companies phased into XBRL tagging (the largest first), so even the
       shares are not comparable with later years. {data.fullYear + 1} is the year to date. Click a
       year to see its largest changes below.
     </p>
-    <details>
-      <summary>The figures, year by year</summary>
-      <div class="tablewrap">
-        <table data-testid="years">
-          <thead>
-            <tr>
-              <th scope="col">Year</th>
-              {#each kinds as [kind, label] (kind)}<th scope="col">{label}</th>{/each}
-              <th scope="col">Companies reporting {figure}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each [...years].reverse() as y (y.year)}
+    {#if !awaiting}
+      <details>
+        <summary>The figures, year by year</summary>
+        <div class="tablewrap">
+          <table data-testid="years">
+            <thead>
               <tr>
-                <td>{y.year}{y.year === data.fullYear + 1 ? " (to date)" : ""}</td>
-                {#each kinds as [kind] (kind)}
-                  <td>{count(y.kinds[kind]?.companies ?? 0)} <span class="muted">{percent(barValue(y, kind, false))}</span></td>
-                {/each}
-                <td>{y.reporting == null ? "—" : count(y.reporting)}</td>
+                <th scope="col">Year</th>
+                {#each kinds as [kind, label] (kind)}<th scope="col">{label}</th>{/each}
+                <th scope="col">Companies reporting {figure}</th>
               </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-    </details>
+            </thead>
+            <tbody>
+              {#each [...years].reverse() as y (y.year)}
+                <tr>
+                  <td>{y.year}{y.year === data.fullYear + 1 ? " (to date)" : ""}</td>
+                  {#each kinds as [kind] (kind)}
+                    <td>{count(y.kinds[kind]?.companies ?? 0)} <span class="muted">{percent(barValue(y, kind, false))}</span></td>
+                  {/each}
+                  <td>{y.reporting == null ? "—" : count(y.reporting)}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    {/if}
   </section>
 
   <section>
@@ -262,6 +272,7 @@
   .check { font-size: 13px; display: inline-flex; gap: 6px; align-items: center; }
   .clear { font: inherit; font-size: 13px; background: none; color: var(--accent); border: 1px solid var(--accent-dim); padding: 5px 10px; cursor: pointer; }
   .note { font-size: 12.5px; max-width: 80ch; margin: 6px 0; }
+  .awaiting { border: 1px solid var(--rule); background: var(--panel); padding: 48px 16px; text-align: center; margin: 0 0 8px; }
   .lede { max-width: 80ch; margin: 0 0 4px; font-size: 13.5px; }
   .count { font-size: 13px; margin: 0 0 8px; }
   details { margin: 8px 0; }

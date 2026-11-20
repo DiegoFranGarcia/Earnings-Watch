@@ -91,6 +91,12 @@ the load and dbt follow.
 - **After changing the dbt project, rebuild the manifest** that the Airflow DAG reads:
   `cd dbt && uv run dbt parse`. Otherwise Airflow keeps building from the old one.
 - **A seed's columns changed:** `uv run dbt seed --full-refresh -s <seed>` once.
+- **The days EDGAR was closed** (`sec_closed_days`, which moves filing deadlines) run to the end of
+  `LAST_YEAR` in `scripts/make_sec_closed_days.py`. When `warn_sec_closed_days_run_out` warns
+  (180 days before), raise `LAST_YEAR`, add any closure the SEC announced to `CLOSURES` with its
+  source, and run `uv run python scripts/make_sec_closed_days.py`. Do the same mid-year if the
+  government closes on a day it did not plan to (a national day of mourning): the SEC posts each
+  one on its "What's New" page.
 - **An incremental model's columns changed** (`on_schema_change='fail'` stops it on purpose):
   `uv run dbt build --full-refresh -s <model>` once.
 - **Run one model and its tests:** `uv run dbt build -s <model>`.
