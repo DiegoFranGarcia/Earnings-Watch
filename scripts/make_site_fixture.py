@@ -173,43 +173,119 @@ def rows(rng: random.Random) -> dict[str, list[dict]]:
                 "is_current": True,
             }
         )
-    for year in range(2009, 2027):
-        for kind in ("tag_switch", "correction", "recast"):
-            for metric in ("net_income", "revenue"):
+    # Restatements, in round numbers the site's tests can check: each year, for net income, 60
+    # amendments, 540 later-filing changes and 200 tag switches (2026, to date: about half), at
+    # 50, 400 and 150 companies counted once under their first kind, of 4,000 companies
+    # reporting the figure (fewer in 2009 and 2010, as XBRL tagging phased in). Revenue and
+    # operating cash flow: the same, scaled down.
+    reporting = {2009: 800, 2010: 2000}
+    counts = {"correction": (60, 55, 50), "recast": (540, 420, 400), "tag_switch": (200, 160, 150)}
+    days = {"correction": "98.0", "recast": "365.0", "tag_switch": "180.0"}
+    for metric, scale in (("net_income", 1.0), ("revenue", 0.8), ("operating_cash_flow", 0.7)):
+        for year in range(2009, 2027):
+            part = scale * (0.5 if year == 2026 else 1.0)
+            for kind, (restated, companies, first_kind) in counts.items():
                 out["export_restatements_by_year"].append(
                     {
                         "change_year": year,
                         "restatement_kind": kind,
                         "metric": metric,
-                        "restatements": rng.randint(50, 900),
-                        "companies": rng.randint(20, 400),
-                        "median_abs_restatement_pct": round(rng.uniform(0.01, 0.3), 4),
-                        "median_days_to_first_change": decimal.Decimal(
-                            f"{rng.uniform(60, 400):.1f}"
-                        ),
+                        "restatements": round(restated * part),
+                        "companies": round(companies * part),
+                        "reporting_companies": reporting.get(year, 4000),
+                        "median_abs_restatement_pct": 0.05,
+                        "median_days_to_first_change": decimal.Decimal(days[kind]),
+                        "companies_by_first_kind": round(first_kind * part),
                         "restatement_group_key": f"{year}|{kind}|{metric}",
                     }
                 )
-    for n in range(1, 21):
-        out["export_restatements_largest"].append(
-            {
-                "restatement_key": f"r{n}",
-                "cik": 1_000_000 + n,
-                "company_name": f"Fixture Co {n:02d}",
-                "metric": "net_income",
-                "period_end": dt.date(2024, 12, 31),
-                "duration_quarters": 4,
-                "restatement_kind": "correction",
-                "first_change_form": "10-K/A",
-                "first_reported_at": ntz(2025, 2, 20, 16),
-                "first_change_at": ntz(2025, 6, 2, 9),
-                "days_to_first_change": 102,
-                "first_reported_value": money(1e8 * n),
-                "latest_value": money(9e7 * n),
-                "restatement_amount": money(-1e7 * n),
-                "restatement_pct": -0.1,
-            }
+
+    # The largest restatements: Fixture Co 01 to 10 amended net income (Co 01 is in both lists),
+    # Co 11 to 20 changed revenue in a later filing, Co 21 to 25 made small amendments that rank
+    # by their share of assets, and one company the screener does not cover (a link to EDGAR).
+    def restatement(n, cik, name, metric, kind, form, changed, amount, assets, selected_by):
+        first = 1e8 * max(n, 1)
+        return {
+            "restatement_key": f"r{n}",
+            "cik": cik,
+            "company_name": name,
+            "metric": metric,
+            "period_end": dt.date(changed.year - 1, 12, 31),
+            "duration_quarters": 4,
+            "restatement_kind": kind,
+            "first_change_form": form,
+            "first_reported_at": ntz(changed.year, 2, 20, 16),
+            "first_change_at": changed,
+            "days_to_first_change": (changed - ntz(changed.year, 2, 20, 16)).days,
+            "first_reported_value": money(first),
+            "latest_value": money(first + amount),
+            "restatement_amount": money(amount),
+            "restatement_pct": round(amount / first, 6),
+            "total_assets": money(assets),
+            "change_to_assets": round(abs(amount) / assets, 6),
+            "selected_by": selected_by,
+        }
+
+    largest = out["export_restatements_largest"]
+    for n in range(1, 11):
+        largest.append(
+            restatement(
+                n,
+                1_000_000 + n,
+                f"Fixture Co {n:02d}",
+                "net_income",
+                "correction",
+                "10-K/A",
+                ntz(2025, 6, 2, 9),
+                -1e7 * (21 - n),
+                1e9 * n,
+                "both" if n == 1 else "amount",
+            )
         )
+    for n in range(11, 21):
+        largest.append(
+            restatement(
+                n,
+                1_000_000 + n,
+                f"Fixture Co {n:02d}",
+                "revenue",
+                "recast",
+                "10-K",
+                ntz(2024, 3, 1, 9),
+                5e6 * (21 - n),
+                1e9 * n,
+                "amount",
+            )
+        )
+    for n in range(21, 26):
+        largest.append(
+            restatement(
+                n,
+                1_000_000 + n,
+                f"Fixture Co {n:02d}",
+                "net_income",
+                "correction",
+                "10-Q/A",
+                ntz(2025, 9, 15, 9),
+                -2e6,
+                5e6,
+                "share_of_assets",
+            )
+        )
+    largest.append(
+        restatement(
+            26,
+            2_000_001,
+            "Gone Co",
+            "operating_cash_flow",
+            "recast",
+            "10-K",
+            ntz(2023, 3, 1, 9),
+            3e8,
+            4e9,
+            "amount",
+        )
+    )
     for year in range(2015, 2026):
         for status, group in (("1-LAF", "large_accelerated"), ("4-NON", "non_accelerated")):
             for form in ("10-K", "10-Q"):
