@@ -286,28 +286,57 @@ def rows(rng: random.Random) -> dict[str, list[dict]]:
             "amount",
         )
     )
-    for year in range(2015, 2026):
-        for status, group in (("1-LAF", "large_accelerated"), ("4-NON", "non_accelerated")):
-            for form in ("10-K", "10-Q"):
-                filings = rng.randint(800, 6000)
-                late = rng.randint(5, 300)
+    # Filing timeliness, in round numbers the site's tests can check. 10-Ks for 2025: 98% of
+    # large accelerated filers' on time, 92% of accelerated, 76% of non-accelerated (3,040 of
+    # 4,000; of the other 960, 576 within a notice's extension and 384 late). Notices are known
+    # from 2025, so earlier years count every filing not on time as late. 2026 is to date:
+    # half the filings, and more of them on time. Fewer smaller companies before 2011 (XBRL's
+    # phase-in).
+    timeliness = {
+        # group: (filings, on-time share, deadline, median days, p90 days, median days late)
+        "10-K": {
+            "large_accelerated": (1500, 0.98, 60, "55.0", "59.0", "6.0"),
+            "accelerated": (1200, 0.92, 75, "70.0", "74.0", "8.0"),
+            "non_accelerated": (4000, 0.76, 90, "86.0", "104.0", "12.0"),
+        },
+        "10-Q": {
+            "large_accelerated": (4500, 0.99, 40, "36.0", "39.0", "3.0"),
+            "accelerated": (3600, 0.95, 40, "38.0", "40.0", "4.0"),
+            "non_accelerated": (12000, 0.85, 45, "43.0", "48.0", "6.0"),
+        },
+    }
+    phase_in = {2009: {"accelerated": 0.3, "non_accelerated": 0.05}, 2010: {"non_accelerated": 0.3}}
+    for form, groups in timeliness.items():
+        for group, (base, share, deadline, median, p90, late_by) in groups.items():
+            for year in range(2009, 2027):
+                filings = round(base * phase_in.get(year, {}).get(group, 1.0))
+                if year == 2026:
+                    filings, share_now = filings // 2, min(share + 0.01, 1.0)
+                else:
+                    share_now = share
+                on_time = round(filings * share_now)
+                not_on_time = filings - on_time
+                notices = year >= 2025
+                within = round(not_on_time * 0.6) if notices else 0
+                late = not_on_time - within
                 out["export_filing_timeliness"].append(
                     {
-                        "timeliness_key": f"{status}|{form}|{year}",
-                        "filer_status": status,
                         "filer_group": group,
                         "form": form,
                         "period_year": year,
                         "filings": filings,
-                        "on_time_filings": filings - late,
-                        "within_extension_filings": late // 2,
-                        "late_filings": late - late // 2,
-                        "late_notices": late // 3,
-                        "median_days_to_file": 38,
-                        "p90_days_to_file": 61,
-                        "median_days_past_due_when_late": 9,
-                        "notice_data_available": year >= 2025,
-                        "on_time_share": round(1 - late / filings, 4),
+                        "on_time_filings": on_time,
+                        "within_extension_filings": within,
+                        "late_filings": late,
+                        "late_notices": within + round(late * 0.1) if notices else 0,
+                        "notice_data_available": notices,
+                        "deadline_days": deadline,
+                        "extension_days": 15 if form == "10-K" else 5,
+                        "median_days_to_file": decimal.Decimal(median),
+                        "p90_days_to_file": decimal.Decimal(p90),
+                        "median_days_past_due_when_late": decimal.Decimal(late_by),
+                        "on_time_share": on_time / filings,
+                        "timeliness_key": f"{group}|{form}|{year}",
                     }
                 )
     for d in range(30):

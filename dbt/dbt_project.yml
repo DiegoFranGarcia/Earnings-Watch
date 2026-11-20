@@ -59,6 +59,11 @@ seeds:
         sic: integer
         office: varchar
         industry_title: varchar
+    sec_closed_days:
+      +column_types:
+        closed_date: date
+        reason: varchar
+        source: varchar
 
 vars:
   # A value counts as restated when its latest figure differs from the first-reported one by

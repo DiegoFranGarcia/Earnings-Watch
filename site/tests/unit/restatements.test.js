@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   DEFAULT,
+  awaitingFigures,
   barValue,
   filterRestatements,
   headline,
@@ -97,4 +98,11 @@ test("the address round-trips; a tag-switch kind needs tag switches included", (
   assert.deepEqual(parseState(new URLSearchParams(toSearch(s))), s);
   assert.equal(parseState(new URLSearchParams("kind=tag_switch")).kind, "");
   assert.deepEqual(parseState(new URLSearchParams("metric=x&year=abc&order=evil&kind=nope")), DEFAULT);
+});
+
+test("an export from before the chart's figures: the page waits for the next one", () => {
+  assert.equal(awaitingFigures(summary), false);
+  const old = summary.map(({ reporting_companies, companies_by_first_kind, ...r }) => r);
+  assert.equal(awaitingFigures(old), true);
+  assert.equal(awaitingFigures([]), false);
 });

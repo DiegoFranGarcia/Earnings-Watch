@@ -1,17 +1,34 @@
 version: 2
 
 models:
+  - name: int_sec_calendar
+    description: >
+      Grain: one row per calendar date, from January 1 of the first year sec_closed_days covers
+      to December 31 of its last. is_business_day: a weekday EDGAR accepted filings.
+      next_business_day: the first business day on or after the date, where a deadline that
+      falls on the date moves (Rule 0-3); null when that lies past the seed's last year.
+    columns:
+      - name: calendar_date
+        data_tests: [unique, not_null]
+      - name: is_business_day
+        data_tests: [not_null]
+
   - name: int_filings__timeliness
     description: >
       Grain: one row per original 10-K or 10-Q (accession number). Its deadline by the filer
-      status recorded on the filing (weekend deadlines move to Monday; holidays are not
-      modelled), any matching late-filing notice, and its timeliness: on_time,
-      within_extension (late, covered by a notice's 15 or 5 extra days), or late. Notices
-      are known only from 2025-01-02 (notice_data_available).
+      status recorded on the filing, moved off weekends and days EDGAR was closed
+      (int_sec_calendar); the extended deadline a late-filing notice allows (15 calendar days
+      for a 10-K, 5 for a 10-Q, counted from the deadline, then moved the same way); any
+      matching notice; and its timeliness: on_time, within_extension (late, but filed by the
+      extended deadline after a notice), or late. Notices are known only from 2025-01-02
+      (notice_data_available).
     columns:
       - name: accession_number
         data_tests: [unique, not_null]
       - name: due_date
+        description: Null only if sec_closed_days does not reach the deadline's year.
+        data_tests: [not_null]
+      - name: extended_due_date
         data_tests: [not_null]
       - name: timeliness
         data_tests:
@@ -26,7 +43,9 @@ unit_tests:
       A large accelerated filer's 10-K due on Saturday 2025-03-01 is due Monday, so filing on
       Monday is on time. A 10-Q filed four days late after a late-filing notice is within its
       5-day extension. A 10-K filed a month late is late even with a notice (15 days allowed).
-      A late 10-Q without a notice is late. Amendments are not measured.
+      A late 10-Q without a notice is late. Amendments are not measured. A 10-Q due on
+      2025-01-09, when EDGAR was closed, is on time filed the next day. A 10-Q whose extension
+      ends on a Saturday is within it when filed the Monday after.
     model: int_filings__timeliness
     given:
       - input: ref('dim_filing')
@@ -36,18 +55,40 @@ unit_tests:
           - {accession_number: "f3", cik: 3, form: "10-K", filer_status: "5-SML", period_end: "2024-12-31", filed_date: "2025-05-01"}
           - {accession_number: "f4", cik: 4, form: "10-Q", filer_status: "4-NON", period_end: "2025-06-30", filed_date: "2025-08-20"}
           - {accession_number: "f5", cik: 1, form: "10-K/A", filer_status: "1-LAF", period_end: "2024-12-31", filed_date: "2025-09-01"}
+          - {accession_number: "f6", cik: 6, form: "10-Q", filer_status: "1-LAF", period_end: "2024-11-30", filed_date: "2025-01-10"}
+          - {accession_number: "f7", cik: 7, form: "10-Q", filer_status: "4-NON", period_end: "2025-06-27", filed_date: "2025-08-18"}
       - input: ref('filing_deadlines')
         rows:
           - {filer_status: "1-LAF", form: "10-K", deadline_days: 60, extension_days: 15}
+          - {filer_status: "1-LAF", form: "10-Q", deadline_days: 40, extension_days: 5}
           - {filer_status: "4-NON", form: "10-Q", deadline_days: 45, extension_days: 5}
           - {filer_status: "5-SML", form: "10-K", deadline_days: 90, extension_days: 15}
+      - input: ref('int_sec_calendar')
+        # Only the dates these filings look up: each deadline, and each deadline plus its
+        # extension. 2025-01-09 (EDGAR closed) and the weekend days move forward.
+        rows:
+          - {calendar_date: "2025-03-01", next_business_day: "2025-03-03"}
+          - {calendar_date: "2025-03-18", next_business_day: "2025-03-18"}
+          - {calendar_date: "2025-05-15", next_business_day: "2025-05-15"}
+          - {calendar_date: "2025-05-20", next_business_day: "2025-05-20"}
+          - {calendar_date: "2025-03-31", next_business_day: "2025-03-31"}
+          - {calendar_date: "2025-04-15", next_business_day: "2025-04-15"}
+          - {calendar_date: "2025-08-14", next_business_day: "2025-08-14"}
+          - {calendar_date: "2025-08-19", next_business_day: "2025-08-19"}
+          - {calendar_date: "2025-01-09", next_business_day: "2025-01-10"}
+          - {calendar_date: "2025-01-15", next_business_day: "2025-01-15"}
+          - {calendar_date: "2025-08-11", next_business_day: "2025-08-11"}
+          - {calendar_date: "2025-08-16", next_business_day: "2025-08-18"}
       - input: ref('int_filings__daily_index')
         rows:
           - {accession_number: "n2", cik: 2, form: "NT 10-Q", filed_date: "2025-05-16"}
           - {accession_number: "n3", cik: 3, form: "NT 10-K", filed_date: "2025-03-31"}
+          - {accession_number: "n7", cik: 7, form: "NT 10-Q", filed_date: "2025-08-12"}
     expect:
       rows:
-        - {accession_number: "f1", due_date: "2025-03-03", days_past_due: 0, filed_late_notice: false, timeliness: on_time}
-        - {accession_number: "f2", due_date: "2025-05-15", days_past_due: 4, filed_late_notice: true, timeliness: within_extension}
-        - {accession_number: "f3", due_date: "2025-03-31", days_past_due: 31, filed_late_notice: true, timeliness: late}
-        - {accession_number: "f4", due_date: "2025-08-14", days_past_due: 6, filed_late_notice: false, timeliness: late}
+        - {accession_number: "f1", due_date: "2025-03-03", extended_due_date: "2025-03-18", days_past_due: 0, filed_late_notice: false, timeliness: on_time}
+        - {accession_number: "f2", due_date: "2025-05-15", extended_due_date: "2025-05-20", days_past_due: 4, filed_late_notice: true, timeliness: within_extension}
+        - {accession_number: "f3", due_date: "2025-03-31", extended_due_date: "2025-04-15", days_past_due: 31, filed_late_notice: true, timeliness: late}
+        - {accession_number: "f4", due_date: "2025-08-14", extended_due_date: "2025-08-19", days_past_due: 6, filed_late_notice: false, timeliness: late}
+        - {accession_number: "f6", due_date: "2025-01-10", extended_due_date: "2025-01-15", days_past_due: 0, filed_late_notice: false, timeliness: on_time}
+        - {accession_number: "f7", due_date: "2025-08-11", extended_due_date: "2025-08-18", days_past_due: 7, filed_late_notice: true, timeliness: within_extension}

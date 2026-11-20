@@ -69,6 +69,15 @@ export function yearly(rows, metric) {
 }
 
 /**
+ * Whether the export predates the chart's figures (no denominator in any row): they arrive with
+ * the next one, and until then the page says so instead of drawing empty bars.
+ * @param {Record<string, any>[]} rows export_restatements_by_year
+ */
+export function awaitingFigures(rows) {
+  return rows.length > 0 && rows.every((r) => r.reporting_companies == null);
+}
+
+/**
  * The opening: of the figures companies changed in a year (tag switches aside), the share that
  * came in an amendment; how many companies changed one, of how many reporting it; and how long
  * the median amendment took.

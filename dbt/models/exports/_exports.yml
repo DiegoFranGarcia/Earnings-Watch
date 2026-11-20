@@ -283,22 +283,34 @@ models:
                 values: [amount, share_of_assets, both]
 
   - name: export_filing_timeliness
-    description: "Grain: one row per filer status, form and period year: mart_filing_timeliness, whole."
+    description: >
+      Grain: one row per filer group, form (10-K or 10-Q) and period year: original filings on
+      time, within a late-filing notice's extension, and late; how long filers took (exact
+      medians per group); the group's deadline and extension in days. Notices are known only
+      from 2025 (notice_data_available): earlier years count filings that used an extension
+      as late, so only on-time against not on-time compares across all years.
     config:
       contract:
         enforced: true
     columns:
-      - name: timeliness_key
-        data_type: varchar
-        data_tests: [unique, not_null]
-      - name: filer_status
-        data_type: varchar
       - name: filer_group
+        description: large_accelerated, accelerated or non_accelerated, by filing deadline.
         data_type: varchar
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [large_accelerated, accelerated, non_accelerated]
       - name: form
         data_type: varchar
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["10-K", "10-Q"]
       - name: period_year
         data_type: integer
+        data_tests: [not_null]
       - name: filings
         data_type: integer
       - name: on_time_filings
@@ -309,16 +321,27 @@ models:
         data_type: integer
       - name: late_notices
         data_type: integer
-      - name: median_days_to_file
-        data_type: integer  # whole days, as in mart_filing_timeliness
-      - name: p90_days_to_file
-        data_type: integer  # whole days, as in mart_filing_timeliness
-      - name: median_days_past_due_when_late
-        data_type: integer  # whole days, as in mart_filing_timeliness
       - name: notice_data_available
         data_type: boolean
+      - name: deadline_days
+        description: Days after the period end the filing is due (before moving off closed days).
+        data_type: integer
+        data_tests: [not_null]
+      - name: extension_days
+        description: Calendar days a late-filing notice adds (Rule 12b-25).
+        data_type: integer
+        data_tests: [not_null]
+      - name: median_days_to_file
+        data_type: decimal(10, 1)
+      - name: p90_days_to_file
+        data_type: decimal(10, 1)
+      - name: median_days_past_due_when_late
+        data_type: decimal(10, 1)
       - name: on_time_share
         data_type: double
+      - name: timeliness_key
+        data_type: varchar
+        data_tests: [unique, not_null]
 
   - name: export_pipeline_health
     description: "Grain: one row per calendar day, the last 30: mart_pipeline_health, whole."
