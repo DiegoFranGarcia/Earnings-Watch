@@ -186,6 +186,11 @@ echo "--- baked in: the dbt manifest and the earningswatch package"
   'ls -l /opt/airflow/dbt/target/manifest.json | awk "{print \$5, \"bytes\"}"; python -c "import earningswatch.volume; print(\"earningswatch importable\")"' \
   || fail "the manifest or the earningswatch package is missing"
 
+echo "--- the Snowflake connector can return Arrow results (publish_site's export needs them):"
+"${compose[@]}" exec -T airflow-scheduler python -c \
+  'from snowflake.connector.options import installed_pandas; assert installed_pandas; print("Arrow results available")' \
+  || fail "the Snowflake connector cannot return Arrow results: pandas is missing from the image"
+
 echo "--- the API's health report, on 127.0.0.1:8081 only:"
 health="$(curl -fsS http://127.0.0.1:8081/api/v2/monitor/health || echo '{}')"
 echo "$health" | python3 -c '

@@ -16,6 +16,11 @@ snowflake-connector-python
 botocore[crt]
 # Writes silver Parquet inside DAG tasks.
 pyarrow
+# The Snowflake connector returns results as Arrow tables (publish_site's export:
+# cursor.fetch_arrow_all) only when pandas is importable; without it the export fails with
+# "Missing optional dependency: pandas". Not the connector's [pandas] extra: it requires
+# pandas < 3, and Airflow's constraints pin pandas 3.
+pandas
 # Renders each dbt model as its own Airflow task. Not in Airflow's constraints, so pinned here:
 # 1.16.0 was under two weeks old when this was chosen.
 astronomer-cosmos==1.15.1
