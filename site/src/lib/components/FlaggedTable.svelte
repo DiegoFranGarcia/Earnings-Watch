@@ -22,7 +22,8 @@
 <section class="section">
   <h2>The flagged companies</h2>
   <p class="lede prose">
-    Trailing twelve months, with the change on the year before, largest gap first. Click a company
+    Trailing twelve months, with the change on the year before, largest gap in dollars first.
+    Companies behind on their filings are left out. Click a company
     for its quarters, restatements and history, or press 1 for the full screener.
   </p>
   <div class="filters">
@@ -51,7 +52,10 @@
         {#each shown as r (r.cik + r.view)}
           {@const g = growth(r.net_income, r.net_income_prior)}
           <tr>
-            <td><a class="co" href="{link("/company")}?cik={r.cik}">{r.name}</a></td>
+            <td>
+              <a class="co" href="{link("/company")}{r.cik}/">{r.name}</a>
+              {#if r.implausible}<span class="tag check" title="Net income or operating cash flow above twice total assets: usually a units mistake in the filing">Check filing</span>{/if}
+            </td>
             <td class="hide-sm">{r.industry}</td>
             <td>{money(r.net_income)} {#if g != null}<span class="up">+{g}%</span>{/if}</td>
             <td class="hide-sm">

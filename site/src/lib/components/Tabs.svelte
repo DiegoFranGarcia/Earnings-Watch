@@ -1,11 +1,15 @@
 <script>
   import { page } from "$app/state";
   import { PAGES, link } from "#lib/pages.js";
+
+  /** The tab of this page, or of the section it is in (a company's page is under Company). */
+  const current = (/** @type {string} */ route) =>
+    page.route.id === route || (route !== "/" && Boolean(page.route.id?.startsWith(`${route}/`)));
 </script>
 
 <nav class="tabs" aria-label="Pages">
   {#each PAGES as p, i (p.route)}
-    <a href={link(p.route)} aria-current={page.route.id === p.route ? "page" : undefined}>
+    <a href={link(p.route)} aria-current={current(p.route) ? "page" : undefined}>
       <kbd aria-hidden="true">{i}</kbd>{p.label}
     </a>
   {/each}

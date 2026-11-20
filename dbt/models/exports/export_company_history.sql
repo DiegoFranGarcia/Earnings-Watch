@@ -11,7 +11,7 @@ versions as (
 ),
 
 industries as (
-    select * from {{ ref('sic_codes') }}
+    select * from {{ ref('stg_sec__sic_codes') }}
 )
 
 select

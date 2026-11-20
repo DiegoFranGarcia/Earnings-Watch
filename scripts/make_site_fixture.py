@@ -86,8 +86,14 @@ def money(value: float) -> decimal.Decimal:
     return decimal.Decimal(f"{value:.4f}")
 
 
+# Two companies that test the site's warnings: one behind on its filings (its latest quarter
+# 2025-12-31, three quarters before most), one with implausible figures (net income above
+# twice its assets, as a units mistake would make it).
+BEHIND, IMPLAUSIBLE = 37, 36
+
+
 def rows(rng: random.Random) -> dict[str, list[dict]]:
-    """Invented rows for every table: 40 companies, 12 quarters each."""
+    """Invented rows for every table: 40 companies, 12 quarters each (company 37: 9)."""
     # Twelve calendar quarter ends, 2023-12-31 to 2026-09-30.
     quarter_ends = [quarter_end(2023, 4 + q) for q in range(12)]
     out: dict[str, list[dict]] = {name: [] for name in contract()}
@@ -96,7 +102,10 @@ def rows(rng: random.Random) -> dict[str, list[dict]]:
         name, group, filer = f"Fixture Co {i:02d}", GROUPS[i % len(GROUPS)], FILERS[i % len(FILERS)]
         flagged = i % 4 == 0
         base_income = rng.uniform(5e6, 4e8)
+        latest = quarter_ends[-4] if i == BEHIND else quarter_ends[-1]
         for q, end in enumerate(quarter_ends):
+            if end > latest:
+                continue
             income = base_income * (1 + (0.06 if flagged else 0.01) * q)
             cash = income * (0.45 if flagged else 1.05)
             restated = q == 6 and i % 5 == 0
@@ -116,6 +125,7 @@ def rows(rng: random.Random) -> dict[str, list[dict]]:
                     "company_quarter_key": f"{cik}|{end}",
                 }
             )
+        filed = ntz(2026, 2, 26, 21, 15) if i == BEHIND else ntz(2026, 11, 2, 21, 15)
         for view in VIEWS:
             ttm = base_income * 4.6
             flag_here = flagged and not (
@@ -125,10 +135,10 @@ def rows(rng: random.Random) -> dict[str, list[dict]]:
                 {
                     "cik": cik,
                     "reporting_view": view,
-                    "period_end": quarter_ends[-1],
-                    "fiscal_year": quarter_ends[-1].year,
-                    "fiscal_quarter": 3,
-                    "known_at": ntz(2026, 11, 2, 21, 15),
+                    "period_end": latest,
+                    "fiscal_year": latest.year,
+                    "fiscal_quarter": (latest.month - 1) // 3 + 1,
+                    "known_at": filed,
                     "sic": 3674,
                     "industry_title": "SEMICONDUCTORS",
                     "filer_status": "1-LAF",
@@ -136,12 +146,13 @@ def rows(rng: random.Random) -> dict[str, list[dict]]:
                     "prior_ttm_net_income": money(ttm * 0.78),
                     "ttm_operating_cash_flow": money(ttm * (0.45 if flagged else 1.05)),
                     "prior_ttm_operating_cash_flow": money(ttm * (0.52 if flagged else 0.98)),
-                    "average_total_assets": money(ttm * 3.5),
+                    "average_total_assets": money(ttm * (0.4 if i == IMPLAUSIBLE else 3.5)),
                     "accruals": money(ttm * 0.55),
                     "accruals_to_assets": round(0.11 + i / 400, 4)
                     if flag_here
                     else round(0.02 + i / 1000, 4),
                     "is_flagged": flag_here,
+                    "is_implausible": i == IMPLAUSIBLE,
                     "company_name": name,
                     "industry_group": group,
                     "filer_group": filer,

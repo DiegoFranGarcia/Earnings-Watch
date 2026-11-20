@@ -15,7 +15,7 @@
     <div class="n" data-testid="flagged">{count(now.flagged)}</div>
     <div class="ctx prose">
       <p class="of">
-        of <span data-testid="universe">{count(now.universe)}</span> companies still filing are flagged,
+        of <span data-testid="universe">{count(now.universe)}</span> companies up to date with their filings are flagged,
         <span data-testid="view-name">{names[/** @type {"latest" | "first_reported"} */ (view)]}</span>.
       </p>
       <p class="def">
