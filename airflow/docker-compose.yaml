@@ -41,9 +41,29 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  # Migrates the database and creates the admin user (the entrypoint, from the two variables
+  # below), then the read-only user record_task_history signs in as, as in deploy/compose.yaml.
   airflow-init:
     <<: *airflow-common
-    command: version
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        set -euo pipefail
+        /entrypoint airflow version
+        # This user only serves record_task_history: if it cannot be set up, the stack still
+        # starts and that DAG fails, saying why (the smoke test checks the user exists).
+        if [ -z "$${TASK_HISTORY_PASSWORD:-}" ]; then
+          echo "TASK_HISTORY_PASSWORD is not set (airflow/.env): task-history not set up" >&2
+        elif airflow users list -o json 2>/dev/null | grep -q '"username": "task-history"'; then
+          airflow users reset-password --username task-history --password "$${TASK_HISTORY_PASSWORD}" \
+            || echo "could not set task-history's password" >&2
+        else
+          airflow users create --role Viewer --username task-history --firstname Task \
+            --lastname History --email task-history@earningswatch.invalid \
+            --password "$${TASK_HISTORY_PASSWORD}" \
+            || echo "could not create task-history" >&2
+        fi
     environment:
       <<: *airflow-common-env
       _AIRFLOW_DB_MIGRATE: "true"

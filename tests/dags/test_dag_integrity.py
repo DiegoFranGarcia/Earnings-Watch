@@ -23,6 +23,7 @@ EXPECTED_DAGS = {
     "company_tickers_snapshot",
     "dbt_build",
     "publish_site",
+    "record_task_history",
     "sec_daily_index",
     "sec_fsds_quarterly",
     "snowflake_load",
