@@ -12,6 +12,7 @@ Each arrow is a data asset, not a clock: a DAG starts because new data arrived.
 SEC -> sec_daily_index (06:00 UTC daily) -> silver_daily_index -> snowflake_load_daily_index -> raw_daily_index -+
 SEC -> sec_fsds_quarterly (quarterly) -> Spark on EMR -> silver_fsds -> snowflake_load -> raw_fsds --------------+-> dbt_build -> marts -> publish_site -> Site workflow -> GitHub Pages
 SEC -> company_tickers_snapshot (07:00 UTC daily) -> bronze tickers
+Airflow's records -> record_task_history (09:30 UTC daily) -> AUDIT.AIRFLOW_TASK_ATTEMPTS
 ~~~
 
 - Failures alert the Discord channel after the task's last retry, with a link to its log.
@@ -234,6 +235,29 @@ Every Snowflake statement carries a query tag naming the pipeline step and the A
 `earningswatch:load:<run_id>` or `earningswatch:dbt:<run_id>`. `ACCOUNT_USAGE.QUERY_HISTORY`
 and `QUERY_ATTRIBUTION_HISTORY` group credits by them.
 
+## Task history
+
+`record_task_history` copies every try of every task from Airflow's own records into
+`AUDIT.AIRFLOW_TASK_ATTEMPTS` at 09:30 UTC, three days back, merging on DAG, run, task, map
+index and try (reading a day twice changes nothing). A task a retry recovered keeps both tries.
+It reads them through Airflow's REST API as `task-history`, a user with the read-only Viewer role:
+the password is `TASK_HISTORY_PASSWORD` in the `airflow-internals` secret, set on the user by
+`airflow-init` at every start, and the task asks for a fresh token each run.
+
+- **Set up once, before the release that adds it reaches the host:**
+  `uv run python scripts/create_airflow_internals_secret.py` (adds only the missing key) and
+  `uv run python scripts/create_audit_tables.py`. Without the key the host still starts; only this
+  DAG fails, and says why.
+- **Rotate the password** each February, the same week as the dispatch token:
+  `uv run python scripts/create_airflow_internals_secret.py --rotate TASK_HISTORY_PASSWORD`. The
+  host applies it at its next start.
+- **It failed with HTTP 401:** the user's password and the secret disagree, which the next start
+  fixes; or `airflow-init` could not set the user up (its log says why).
+- What the credentials can reach: read-only run history, as the smoke test checks (listing runs
+  works, starting a DAG is refused). Tasks run inside the scheduler's container, which also holds
+  Airflow's own secrets, so this limits what the recorder's code and any leaked token can do, not
+  what a compromised scheduler could.
+
 ## The public site
 
 **What runs.** After every `dbt_build` that passes, `publish_site` exports the dbt docs and the
@@ -304,4 +328,5 @@ A fine-grained personal access token, kept in Secrets Manager as
   unset token; pbcopy </dev/null    # clear the variable and the clipboard
   ~~~
 
-  Then update the expiry date above, and test it with *Publish by hand*.
+  Then update the expiry date above, and test it with *Publish by hand*. The same week, rotate
+  task-history's password (*Task history*, above).

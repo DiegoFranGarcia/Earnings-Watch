@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "airflow" / "dags")
 
 from earningswatch.costs import EMR_TABLE_SQL  # noqa: E402
 from earningswatch.snowflake_load import connect  # noqa: E402
+from earningswatch.task_history import TABLE_SQL as TASK_ATTEMPTS_TABLE_SQL  # noqa: E402
 from earningswatch.volume import DQ_TABLE_SQL  # noqa: E402
 
 
@@ -27,7 +28,7 @@ def main() -> int:
     )
     try:
         cursor = con.cursor()
-        for sql in (DQ_TABLE_SQL, EMR_TABLE_SQL):
+        for sql in (DQ_TABLE_SQL, EMR_TABLE_SQL, TASK_ATTEMPTS_TABLE_SQL):
             cursor.execute(sql)
             print(sql.split("(")[0].replace("CREATE TABLE IF NOT EXISTS ", "ready: "))
     finally:

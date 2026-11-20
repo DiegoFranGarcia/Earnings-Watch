@@ -138,7 +138,10 @@ services:
 
   # Migrates the metadata database and creates the admin user (the official image's entrypoint does
   # both when the two variables below are set), then creates the pools every DAG relies on: a task
-  # in a pool that does not exist waits forever, silently. `pools set` is idempotent.
+  # in a pool that does not exist waits forever, silently. `pools set` is idempotent. Last, the
+  # read-only user record_task_history signs in as (role Viewer: it can read run history and
+  # change nothing). `users create` leaves an existing user alone, so the password is set again
+  # on every start: a rotated TASK_HISTORY_PASSWORD takes effect at the next boot.
   airflow-init:
     <<: *airflow-common
     entrypoint: /bin/bash
@@ -151,6 +154,19 @@ services:
         # Spark tasks defer while EMR runs; the pool must still count them, or two jobs could run.
         airflow pools set emr 1 "One Spark job at a time" --include-deferred
         airflow pools set snowflake 4 "Concurrent Snowflake sessions"
+        # This user only serves record_task_history: if it cannot be set up, the stack still
+        # starts and that DAG fails, saying why (the smoke test checks the user exists).
+        if [ -z "$${TASK_HISTORY_PASSWORD:-}" ]; then
+          echo "TASK_HISTORY_PASSWORD is not set (the airflow-internals secret): task-history not set up" >&2
+        elif airflow users list -o json 2>/dev/null | grep -q '"username": "task-history"'; then
+          airflow users reset-password --username task-history --password "$${TASK_HISTORY_PASSWORD}" \
+            || echo "could not set task-history's password" >&2
+        else
+          airflow users create --role Viewer --username task-history --firstname Task \
+            --lastname History --email task-history@earningswatch.invalid \
+            --password "$${TASK_HISTORY_PASSWORD}" \
+            || echo "could not create task-history" >&2
+        fi
     environment:
       <<: *airflow-common-env
       _AIRFLOW_DB_MIGRATE: "true"

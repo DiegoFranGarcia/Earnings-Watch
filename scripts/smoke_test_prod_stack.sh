@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Boot the production stack from an image, exactly as the host will (the production Compose file,
 # the same settings), check it, and tear it down. Fails if a service is unhealthy, a DAG fails to
-# import, or the DAGs are not exactly the expected six. Nothing is shared with the local
+# import, or the DAGs are not exactly the expected ones. Nothing is shared with the local
 # development stack (its own project name, database volume and port 8081).
 #
 #   scripts/smoke_test_prod_stack.sh <image>
@@ -19,7 +19,7 @@ exec </dev/null
 
 image="${1:?usage: scripts/smoke_test_prod_stack.sh <image>}"
 throwaway="${SMOKE_TEST_THROWAWAY:-0}"
-expected_dags="company_tickers_snapshot dbt_build publish_site sec_daily_index sec_fsds_quarterly snowflake_load snowflake_load_daily_index"
+expected_dags="company_tickers_snapshot dbt_build publish_site record_task_history sec_daily_index sec_fsds_quarterly snowflake_load snowflake_load_daily_index"
 cd "$(git rev-parse --show-toplevel)"
 
 home="$(mktemp -d)"
@@ -54,6 +54,7 @@ print("POSTGRES_PASSWORD=" + secrets.token_urlsafe(24))
 print("FERNET_KEY=" + base64.urlsafe_b64encode(os.urandom(32)).decode())
 print("AIRFLOW__API_AUTH__JWT_SECRET=" + secrets.token_urlsafe(32))
 print("_AIRFLOW_WWW_USER_PASSWORD=" + secrets.token_urlsafe(16))
+print("TASK_HISTORY_PASSWORD=" + secrets.token_urlsafe(16))
 print("SEC_USER_AGENT=EarningsWatch smoke-test@example.com")
 PY
   }
@@ -156,10 +157,11 @@ echo "registered: ${registered:-(none)} (attempt $attempt of 24)"
 if [ "$registered" != "$expected_dags" ]; then
   echo "the last attempt's output:" >&2
   echo "$raw" | grep -vi openlineage | tail -8 >&2
-  fail "the DAG processor did not register exactly the seven DAGs within two minutes"
+  fail "the DAG processor did not register exactly the expected DAGs within two minutes"
 fi
 
-echo "--- the admin user (created by airflow-init; without it, nobody can log in to the UI):"
+echo "--- the admin and task-history users (created by airflow-init; without them, nobody can log in"
+echo "    to the UI, and record_task_history cannot read the run history):"
 # Retried: right after the stack reports healthy, the API server is still rewriting the FAB
 # permission tables, and a read can fail while the user exists. The attempt count shows if so.
 users=""; raw=""
@@ -167,14 +169,19 @@ for attempt in 1 2 3 4 5 6; do
   raw="$("${compose[@]}" exec -T airflow-scheduler airflow users list -o json 2>&1 || true)"
   users="$(echo "$raw" | json_array \
     | python3 -c 'import json, sys; print(" ".join(sorted(u["username"] for u in json.load(sys.stdin))))' || true)"
-  [[ " $users " == *" admin "* ]] && break
+  [[ " $users " == *" admin "* && " $users " == *" task-history "* ]] && break
   sleep 5
 done
 echo "users: ${users:-(none)} (attempt $attempt of 6)"
-if [[ " $users " != *" admin "* ]]; then
+if [[ " $users " != *" admin "* || " $users " != *" task-history "* ]]; then
   echo "the last attempt's output:" >&2
   echo "$raw" | grep -vi openlineage | tail -8 >&2
-  fail "the admin user was not created"
+  fail "the admin or task-history user was not created"
+else
+  roles="$(echo "$raw" | json_array \
+    | python3 -c 'import json, sys; print(" ".join(next(u["roles"] for u in json.load(sys.stdin) if u["username"] == "task-history")))')"
+  echo "task-history's roles: $roles"
+  [ "$roles" = "Viewer" ] || fail "task-history must have exactly the Viewer role, not: $roles"
 fi
 
 echo "--- every module the DAG code can import, top-level and inside functions:"
@@ -200,6 +207,32 @@ statuses = {k: v.get("status") for k, v in health.items()}
 print(statuses)
 sys.exit(0 if statuses and all(s == "healthy" for s in statuses.values()) else 1)' \
   || fail "a component is not healthy"
+
+echo "--- task-history signs in to the API and can read run history, but not start a DAG:"
+# Its password, from the env file this test wrote, sent from Python's memory: never on a command
+# line. Read: listing DAG runs (200). Write: triggering a DAG (403, refused for a Viewer).
+grep '^TASK_HISTORY_PASSWORD=' "$home/airflow.env" | cut -d= -f2- | python3 -c '
+import json, sys, urllib.error, urllib.request
+base = "http://127.0.0.1:8081"
+def call(method, path, body=None, token=None):
+    request = urllib.request.Request(base + path, method=method, data=json.dumps(body).encode() if body is not None else None)
+    request.add_header("Content-Type", "application/json")
+    if token:
+        request.add_header("Authorization", "Bearer " + token)
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return response.status, json.load(response)
+    except urllib.error.HTTPError as error:
+        return error.code, None
+status, body = call("POST", "/auth/token", {"username": "task-history", "password": sys.stdin.read().strip()})
+if status >= 300:
+    sys.exit(f"sign-in: HTTP {status}")
+token = body["access_token"]
+read, _ = call("GET", "/api/v2/dags/~/dagRuns?limit=1", token=token)
+write, _ = call("POST", "/api/v2/dags/publish_site/dagRuns", {"logical_date": None}, token=token)
+print(f"sign-in: HTTP {status}; list runs: HTTP {read}; trigger a DAG: HTTP {write}")
+sys.exit(0 if read == 200 and write == 403 else 1)' \
+  || fail "task-history cannot read run history, or can do more than read it"
 
 if [ "$failures" -gt 0 ]; then
   echo "SMOKE TEST FAILED: $failures check(s)" >&2

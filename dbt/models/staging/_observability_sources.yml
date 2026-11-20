@@ -29,3 +29,10 @@ sources:
         description: >
           Every model, seed and test result of every dbt invocation, recorded by the on-run-end
           hook in macros/audit.sql (owned by TRANSFORMER).
+      - name: airflow_task_attempts
+        identifier: AIRFLOW_TASK_ATTEMPTS
+        description: >
+          Every finished try of every Airflow task, one row per DAG, run, task, map index and
+          try, copied from Airflow's own records through its REST API by record_task_history
+          (daily, three days back, merged). A task a retry recovered has a failed try and a
+          successful one.
