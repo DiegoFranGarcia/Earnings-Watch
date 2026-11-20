@@ -182,7 +182,7 @@ models:
     description: >
       Grain: one row per year of first material change, restatement kind and metric: how many
       restatements, at how many companies, the median absolute change and the median days to
-      the first change. Likely scale errors are excluded.
+      the first change, with the rate's denominator. Likely scale errors are excluded.
     config:
       contract:
         enforced: true
@@ -200,19 +200,32 @@ models:
         data_type: integer
       - name: companies
         data_type: integer
+      - name: reporting_companies
+        description: >
+          Companies whose 10-K or 10-Q filings that year report the metric in a form the models
+          read: the denominator of the share that restated.
+        data_type: integer
       - name: median_abs_restatement_pct
         data_type: double
       - name: median_days_to_first_change
         data_type: decimal(10, 1)
+      - name: companies_by_first_kind
+        description: >
+          Companies counted once per year and metric, under their first kind (correction, then
+          recast, then tag_switch): these stack to the companies that changed the metric.
+        data_type: integer
+        data_tests: [not_null]
       - name: restatement_group_key
         data_type: varchar
         data_tests: [unique, not_null]
 
   - name: export_restatements_largest
     description: >
-      Grain: one row per restatement (mart_restatements), the var site_largest_restatements
+      Grain: one row per restatement (mart_restatements): the var site_largest_restatements
       largest material restatements of net income, revenue and operating cash flow by absolute
-      amount. Likely scale errors are excluded.
+      amount, and the var site_largest_amendments largest corrections by the change as a share
+      of total assets (changes of at least var site_amendment_min_change). Likely scale errors
+      are excluded.
     config:
       contract:
         enforced: true
@@ -254,6 +267,20 @@ models:
         data_type: decimal(30, 4)
       - name: restatement_pct
         data_type: double
+      - name: total_assets
+        description: Total assets at the period's end, after restatements; null if not reported.
+        data_type: decimal(28, 4)
+      - name: change_to_assets
+        description: The absolute amount changed as a share of total_assets.
+        data_type: double
+      - name: selected_by
+        description: Which list brought the row in, amount, share_of_assets, or both.
+        data_type: varchar
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [amount, share_of_assets, both]
 
   - name: export_filing_timeliness
     description: "Grain: one row per filer status, form and period year: mart_filing_timeliness, whole."

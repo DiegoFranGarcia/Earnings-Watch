@@ -84,6 +84,10 @@ vars:
   site_recent_months: 18
   site_first_quarter: "2015-01-01"
   site_largest_restatements: 500
+  # The restatements page also lists the largest amendments (corrections) by the change as a
+  # share of total assets, among changes of at least this many dollars.
+  site_largest_amendments: 500
+  site_amendment_min_change: 1000000
 
 flags:
   send_anonymous_usage_stats: false
