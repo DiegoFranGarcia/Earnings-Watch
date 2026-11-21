@@ -152,8 +152,8 @@ Every check that fired was investigated against the data before anything was cha
 | 5. Orchestration end to end: asset-triggered DAGs, Cosmos, alerts | ✅ |
 | 6. Data quality and observability: AUDIT, circuit breaker, cost per run, chaos drills | ✅ |
 | 7. Deployment: EC2 on a schedule, releases pulled with automatic fallback, nightly backups, rebuild drilled | ✅ |
-| 8. CI/CD: OIDC roles, slim dbt CI, smoke tests, vulnerability gates and weekly scans, protected main | in progress |
-| 9. Demo: dashboard, video, write-up | |
+| 8. CI/CD: OIDC roles, slim dbt CI, smoke tests, vulnerability gates and weekly scans, protected main | ✅ |
+| 9. Demo: dashboard, video, write-up | in progress |
 
 A thin end-to-end slice (one quarter, DuckDB, dbt, Streamlit) was built first, so modelling
 problems surfaced in week three rather than week fifteen.

@@ -17,5 +17,9 @@ in AUDIT.DQ_RESULTS. After investigating, a person can publish anyway with
 ## Consequences
 - Drilled: 60% of 2026q3 deleted, the gate failed at 42%, the marts' fingerprints were unchanged,
   and a reload healed everything without further steps.
+- Drilled again 2026-11-21 on the daily check, with the public site at the end of the chain: about
+  70% of a day's filings deleted, the gate failed at 23% with no retry, the marts and the live site
+  kept the last good export, and reloading the month redeployed the site by itself
+  ([chaos drills](../chaos.md)).
 - A genuinely quiet day (Christmas Eve) needs a human decision; the override records it.
 - The gate costs about a cent per run.
