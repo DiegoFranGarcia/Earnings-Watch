@@ -2,7 +2,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { allowWasm } from "../../scripts/sql-csp.mjs";
-import { EXAMPLES, describeError, formatValue, fromFragment, toCsv, toFragment } from "#lib/sql.js";
+import { createHash } from "node:crypto";
+import {
+  DownloadError,
+  EXAMPLES,
+  StaleDataError,
+  checkTable,
+  describeError,
+  downloadTables,
+  formatValue,
+  fromFragment,
+  tableUrl,
+  toCsv,
+  toFragment,
+} from "#lib/sql.js";
 
 test("a query travels in the fragment, round-trips exactly, and nothing else is read as one", () => {
   const sql = "select 'a b', 1 + 1 as two -- #note\nfrom export_screener where x = '100%'";
@@ -55,4 +68,76 @@ test("the SQL page's policy gains exactly 'wasm-unsafe-eval' and worker-src 'sel
   );
   assert.throws(() => allowWasm(allowWasm(site)), /fresh build/);
   assert.throws(() => allowWasm("default-src 'self'"), /no script-src/);
+});
+
+const ROOT = "https://example.test/Earnings-Watch/";
+const bytesOf = (/** @type {string} */ text) => new TextEncoder().encode(text);
+const entryOf = (/** @type {Uint8Array} */ b) => ({ bytes: b.byteLength, sha256: createHash("sha256").update(b).digest("hex") });
+
+test("a table's address names the export it belongs to, safely encoded", () => {
+  assert.equal(
+    tableUrl(ROOT, "export_screener", "asset_triggered__2026-11-21T13:58:12+00:00_x"),
+    "https://example.test/Earnings-Watch/data/export_screener.parquet?v=asset_triggered__2026-11-21T13%3A58%3A12%2B00%3A00_x",
+  );
+});
+
+test("a table is used only if its size and sha256 are exactly site.json's", async () => {
+  const file = bytesOf("PAR1 the table PAR1");
+  await checkTable("t", file, entryOf(file));
+  await assert.rejects(checkTable("t", file, { ...entryOf(file), sha256: "0".repeat(64) }), StaleDataError);
+  await assert.rejects(checkTable("t", file, { ...entryOf(file), bytes: 1 }), StaleDataError);
+  await assert.rejects(checkTable("t", file, undefined), /not in this site's site.json/);
+});
+
+/**
+ * A fetch that serves the given files and records each request.
+ * @param {Record<string, Uint8Array | number>} files path (after the site root) -> body, or an HTTP status
+ */
+function fakeFetch(files) {
+  /** @type {{ url: string, init: RequestInit | undefined }[]} */
+  const calls = [];
+  /** @type {typeof fetch} */
+  const fetchFn = async (input, init) => {
+    const url = String(input);
+    calls.push({ url, init });
+    const body = files[url.slice(ROOT.length)];
+    if (body === undefined) return new Response("404", { status: 404 });
+    if (typeof body === "number") return new Response("", { status: body });
+    return new Response(/** @type {BodyInit} */ (body), { status: 200 });
+  };
+  return { fetchFn, calls };
+}
+
+test("downloadTables: site.json past the cache, then every table whole at its export's address", async () => {
+  const a = bytesOf("table a"), b = bytesOf("table b");
+  const live = { run_id: "run-1", files: { "a.parquet": entryOf(a), "b.parquet": entryOf(b) } };
+  const { fetchFn, calls } = fakeFetch({
+    "site.json": bytesOf(JSON.stringify(live)),
+    "data/a.parquet?v=run-1": a,
+    "data/b.parquet?v=run-1": b,
+  });
+  const files = await downloadTables(ROOT, ["a", "b"], fetchFn);
+  assert.deepEqual(files.map(([name, data]) => [name, new TextDecoder().decode(data)]), [["a", "table a"], ["b", "table b"]]);
+  assert.equal(calls[0].url, `${ROOT}site.json`);
+  assert.equal(calls[0].init?.cache, "no-store");
+  for (const call of calls.slice(1)) assert.equal(new Headers(call.init?.headers).get("range"), null);
+});
+
+test("downloadTables: a mismatch is stale data, a refused file is a download error", async () => {
+  const a = bytesOf("table a");
+  const live = { run_id: "run-1", files: { "a.parquet": { ...entryOf(a), sha256: "f".repeat(64) } } };
+  const stale = fakeFetch({ "site.json": bytesOf(JSON.stringify(live)), "data/a.parquet?v=run-1": a });
+  await assert.rejects(downloadTables(ROOT, ["a"], stale.fetchFn), StaleDataError);
+  const refused = fakeFetch({ "site.json": bytesOf(JSON.stringify({ ...live, files: { "a.parquet": entryOf(a) } })), "data/a.parquet?v=run-1": 503 });
+  await assert.rejects(downloadTables(ROOT, ["a"], refused.fetchFn), (e) => e instanceof DownloadError && /HTTP 503/.test(e.message));
+  const offline = /** @type {typeof fetch} */ (async () => { throw new TypeError("Failed to fetch"); });
+  await assert.rejects(downloadTables(ROOT, ["a"], offline), DownloadError);
+  const nothing = fakeFetch({ "site.json": bytesOf("{}") });
+  await assert.rejects(downloadTables(ROOT, ["a"], nothing.fetchFn), /names no export/);
+});
+
+test("stale data and failed downloads read plainly", () => {
+  assert.equal(describeError(new StaleDataError("x")).kind, "stale");
+  assert.match(describeError(new StaleDataError("x")).text, /Reload the page/);
+  assert.equal(describeError(new DownloadError("x")).kind, "download");
 });

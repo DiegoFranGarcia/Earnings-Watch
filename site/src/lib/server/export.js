@@ -12,10 +12,13 @@ const DIR = process.env.EW_DATA_DIR ?? "../_site";
 /** @type {Map<string, Promise<Record<string, any>[]>>} */
 const tables = new Map();
 
+/** Where one exported table's file is, in the export this build reads. @param {string} name */
+export const tableFile = (name) => path.join(DIR, "data", `${name}.parquet`);
+
 /** Every row of one exported table, read once per build. @param {string} name */
 export function table(name) {
   if (!tables.has(name)) {
-    const file = path.join(DIR, "data", `${name}.parquet`);
+    const file = tableFile(name);
     if (!fs.existsSync(file)) {
       throw new Error(`${file} is missing: set EW_DATA_DIR to an export (build_site.py's output)`);
     }

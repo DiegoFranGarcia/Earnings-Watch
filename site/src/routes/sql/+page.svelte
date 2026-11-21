@@ -21,7 +21,8 @@
   let note = $state("");
   let copied = $state(false);
 
-  const mb = (/** @type {number} */ bytes) => `${(bytes / 1e6).toFixed(1)} MB`;
+  // An estimate (gzip, measured at build): Pages decides the exact compression.
+  const about = (/** @type {number} */ bytes) => `about ${Math.max(1, Math.round(bytes / 1e6))} MB`;
   const busy = $derived(phase === "starting" || phase === "running");
 
   onMount(() => {
@@ -139,7 +140,7 @@
 
       <div class="actions">
         <button type="button" class="primary" onclick={run} disabled={busy} data-testid="run">
-          {#if phase === "starting"}Starting DuckDB…{:else if phase === "running"}Running…{:else if duck}Run <span class="key">Ctrl+Enter</span>{:else}Start DuckDB and run <span class="key">downloads {mb(data.downloadBytes)}</span>{/if}
+          {#if phase === "starting"}Starting DuckDB…{:else if phase === "running"}Running…{:else if duck}Run <span class="key">Ctrl+Enter</span>{:else}Start DuckDB and run <span class="key">downloads {about(data.downloadBytes)}</span>{/if}
         </button>
         {#if busy}<button type="button" onclick={stop} data-testid="stop">Stop</button>{/if}
         <button type="button" onclick={share}>{copied ? "Link copied" : "Copy link to this query"}</button>

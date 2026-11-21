@@ -1,7 +1,7 @@
 // The SQL page in real browsers (Chromium, Firefox and WebKit: see playwright.config.js), against
 // the fixture export, with DuckDB, its worker, its Parquet extension and the data all served by
-// tests/serve.mjs as GitHub Pages serves them. Every example query runs here, so a renamed
-// column breaks the build instead of the demo.
+// tests/serve.mjs as GitHub Pages serves them, gzip and all. Every example query runs here, so a
+// renamed column breaks the build instead of the demo.
 import { expect, test } from "@playwright/test";
 import { EXAMPLES } from "../src/lib/sql.js";
 
@@ -39,7 +39,7 @@ test("before a click: the tables and examples are in the page, and DuckDB is not
   await expect(page.locator("details[data-table]")).toHaveCount(7);
   await expect(page.locator('details[data-table="export_screener"] summary')).toContainText("rows");
   await expect(page.locator("[data-example]")).toHaveCount(EXAMPLES.length);
-  await expect(page.getByTestId("run")).toContainText(/Start DuckDB and run downloads \d+\.\d MB/);
+  await expect(page.getByTestId("run")).toContainText(/Start DuckDB and run downloads about \d+ MB/);
   await page.waitForTimeout(500);
   expect(seen.filter((r) => /\.wasm|worker|\.parquet/.test(r.url))).toEqual([]);
 });
@@ -54,7 +54,7 @@ test("a shared link fills the editor and waits for a click", async ({ page }) =>
   expect(seen.filter((r) => /\.wasm|worker|\.parquet/.test(r.url))).toEqual([]);
 });
 
-test("every example runs against the export, from this site only, reading Parquet in ranges", async ({ page }) => {
+test("every example runs against the export, from this site only, each table downloaded whole", async ({ page }) => {
   test.setTimeout(180_000);
   /** @type {string[]} */
   const problems = [];
@@ -75,7 +75,17 @@ test("every example runs against the export, from this site only, reading Parque
   expect(new URL(page.url()).search).toBe("");
   expect(seen.filter((r) => !r.url.startsWith("http://localhost:4173/"))).toEqual([]);
   expect(seen.some((r) => r.url.endsWith("/duckdb/v1.4.3/wasm_eh/parquet.duckdb_extension.wasm") && r.status === 200)).toBe(true);
-  expect(seen.some((r) => r.url.endsWith(".parquet") && r.status === 206)).toBe(true);
+  // Whole files, never byte ranges (ADR 20): each table in one request, at the address of the
+  // export it belongs to, so no earlier export's cached copy can answer any part of it.
+  expect(seen.filter((r) => r.range !== undefined)).toEqual([]);
+  const tables = seen.filter((r) => new URL(r.url).pathname.endsWith(".parquet"));
+  expect(tables.map((r) => new URL(r.url).pathname.split("/").pop()).sort()).toEqual(
+    (await page.locator("details[data-table]").evaluateAll((els) => els.map((e) => e.getAttribute("data-table")))).map((t) => `${t}.parquet`).sort(),
+  );
+  for (const r of tables) {
+    expect(r.status, r.url).toBe(200);
+    expect(new URL(r.url).searchParams.get("v"), r.url).toBe("fixture");
+  }
   expect(problems).toEqual([]);
 });
 
@@ -106,6 +116,36 @@ test("mistakes read plainly: a wrong column, and an extension the console does n
   // The console still works after both.
   await run(page, "select 42 as answer");
   await expect(page.getByTestId("result")).toContainText("42");
+});
+
+test("a table that does not match site.json is never queried: the page asks for a reload", async ({ page }) => {
+  test.setTimeout(120_000);
+  // site.json as a visitor's browser might get it right after a deploy: one table's hash is not
+  // the hash of the file it downloads.
+  await page.route("**/Earnings-Watch/site.json", async (route) => {
+    const live = await (await route.fetch()).json();
+    live.files["export_restatements_largest.parquet"].sha256 = "0".repeat(64);
+    await route.fulfill({ json: live });
+  });
+  await open(page);
+  await run(page, "select count(*) from export_restatements_largest");
+  await expect(page.getByTestId("error")).toHaveAttribute("data-kind", "stale");
+  await expect(page.getByTestId("error")).toContainText("Reload the page");
+  await expect(page.getByTestId("error")).toContainText("export_restatements_largest.parquet");
+  await expect(page.getByTestId("result")).toHaveCount(0);
+});
+
+test("a table that cannot be downloaded says so, and the next run tries again", async ({ page }) => {
+  test.setTimeout(120_000);
+  let refuse = true;
+  await page.route("**/data/export_pipeline_health.parquet*", (route) => (refuse ? route.fulfill({ status: 503 }) : route.fallback()));
+  await open(page);
+  await run(page, "select 1 as one");
+  await expect(page.getByTestId("error")).toHaveAttribute("data-kind", "download");
+  await expect(page.getByTestId("error")).toContainText("could not be downloaded");
+  refuse = false;
+  await run(page, "select count(*) as days from export_pipeline_health");
+  await expect(page.getByTestId("result")).toContainText("30");
 });
 
 test("Stop ends a runaway query at once, and the next run starts DuckDB again", async ({ page }) => {

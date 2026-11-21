@@ -3,7 +3,9 @@
 #
 # Three jobs, so the app's build tools never run where there are credentials: `export` (AWS)
 # downloads and checks the export; `app` (no credentials) builds the app from it with npm and
-# puts the app beside the export's files; `deploy` (Pages) publishes what `app` assembled.
+# puts the app beside the export's files; `deploy` (Pages) publishes what `app` assembled. Then
+# `verify` (no credentials) asks the live site for what the SQL page downloads, as a browser
+# does, and checks it against what was deployed (scripts/verify_live_site.py, ADR 20).
 name: Site
 
 on:
@@ -27,6 +29,7 @@ on:
     paths:
       - .github/workflows/site.yml
       - scripts/build_site.py
+      - scripts/verify_live_site.py
       - site/**
 
 permissions: {}
@@ -119,6 +122,34 @@ jobs:
     permissions:
       id-token: write  # Pages verifies this job with OIDC
       pages: write  # deploy the site
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346  # v5.0.1
+
+  verify:
+    name: Check the live site as a browser gets it (no credentials)
+    needs: deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20  # site.json may take up to 12 minutes to change at the edge
+    permissions:
+      contents: read  # check out scripts/verify_live_site.py
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: The site as deployed (the Pages artifact)
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: github-pages
+          path: _pages
+
+      - name: Unpack it
+        run: mkdir _deployed && tar -xf _pages/artifact.tar -C _deployed
+
+      - name: Every table, and DuckDB's files, as Pages serves them to a browser
+        env:
+          PAGE_URL: ${{ needs.deploy.outputs.page_url }}
+        run: python3 scripts/verify_live_site.py --site-dir _deployed --url "$PAGE_URL"

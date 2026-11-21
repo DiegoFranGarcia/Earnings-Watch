@@ -1,6 +1,7 @@
 // The SQL page's logic, apart from DuckDB itself: the example queries, the shareable link (the
-// query lives in the address's fragment, which never reaches a server), how results are shown and
-// downloaded (both capped), and errors in plain words. Plain functions, tested on their own.
+// query lives in the address's fragment, which never reaches a server), downloading the tables
+// and checking each against site.json, how results are shown and downloaded (both capped), and
+// errors in plain words. Plain functions, tested on their own.
 
 /** Rows shown on the page; the full count is always reported. */
 export const ROW_CAP = 1000;
@@ -143,13 +144,120 @@ export function toCsv(columns, rows) {
   return [columns, ...rows].map((row) => row.map(quote).join(",")).join("\r\n") + "\r\n";
 }
 
+/** The site's data changed while the page was open, or a cache held part of the previous copy. */
+export class StaleDataError extends Error {
+  /** @param {string} message */
+  constructor(message) {
+    super(message);
+    this.name = "StaleDataError";
+  }
+}
+
+/** A file could not be downloaded at all (offline, or the server refused). */
+export class DownloadError extends Error {
+  /** @param {string} message */
+  constructor(message) {
+    super(message);
+    this.name = "DownloadError";
+  }
+}
+
 /**
- * What went wrong, in plain words, keeping DuckDB's own message for the details.
+ * A table's file, tagged with the export it belongs to: a new export has new addresses, so no
+ * cache, the browser's or GitHub's, can answer with a copy from an earlier one.
+ * @param {string} siteRoot the site's absolute URL, ending in "/"
+ * @param {string} table
+ * @param {string} runId the export's run ID (site.json)
+ */
+export const tableUrl = (siteRoot, table, runId) =>
+  new URL(`data/${table}.parquet?v=${encodeURIComponent(runId)}`, siteRoot).href;
+
+/** @param {Uint8Array} bytes */
+export async function sha256Hex(bytes) {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", /** @type {BufferSource} */ (bytes)));
+  return Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * The file must be exactly the one site.json lists, or nothing is queried: a stale copy would
+ * otherwise mix an old table into answers about new ones.
+ * @param {string} table
+ * @param {Uint8Array} bytes
+ * @param {{ bytes?: number, sha256?: string } | undefined} entry site.json's entry for the file
+ */
+export async function checkTable(table, bytes, entry) {
+  if (!entry?.sha256) throw new StaleDataError(`${table}.parquet is not in this site's site.json`);
+  const digest = await sha256Hex(bytes);
+  if (bytes.byteLength !== entry.bytes || digest !== entry.sha256) {
+    throw new StaleDataError(
+      `${table}.parquet is ${bytes.byteLength} bytes with sha256 ${digest.slice(0, 12)}, ` +
+        `but site.json lists ${entry.bytes} bytes with sha256 ${entry.sha256.slice(0, 12)}`,
+    );
+  }
+}
+
+/**
+ * Fetch, turning a network failure or an HTTP error into a DownloadError.
+ * @param {typeof fetch} fetchFn
+ * @param {string} url
+ * @param {RequestInit} [init]
+ */
+async function get(fetchFn, url, init) {
+  let response;
+  try {
+    response = await fetchFn(url, init);
+  } catch (error) {
+    throw new DownloadError(`${url}: ${error instanceof Error ? error.message : error}`);
+  }
+  if (!response.ok) throw new DownloadError(`${url}: HTTP ${response.status}`);
+  return response;
+}
+
+/**
+ * Every table, whole, in one request each, checked against the live site.json (ADR 20). Byte
+ * ranges would read a file in several requests, and right after a deploy a cache can answer some
+ * of them from the previous export (2026-11-21); a whole file is also what a sha256 check needs.
+ * site.json is fetched past the browser's cache: it says which export is live.
+ * @param {string} siteRoot the site's absolute URL, ending in "/"
+ * @param {string[]} tables
+ * @param {typeof fetch} [fetchFn]
+ * @returns {Promise<[string, Uint8Array][]>}
+ */
+export async function downloadTables(siteRoot, tables, fetchFn = fetch) {
+  const live = await (await get(fetchFn, new URL("site.json", siteRoot).href, { cache: "no-store" })).json();
+  const runId = live?.run_id ?? live?.exported_at;
+  if (typeof runId !== "string" || !live.files) throw new StaleDataError("site.json names no export");
+  return Promise.all(
+    tables.map(async (table) => {
+      const response = await get(fetchFn, tableUrl(siteRoot, table, runId));
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      await checkTable(table, bytes, live.files[`${table}.parquet`]);
+      return /** @type {[string, Uint8Array]} */ ([table, bytes]);
+    }),
+  );
+}
+
+/**
+ * What went wrong, in plain words, keeping the original message for the details.
  * @param {unknown} error
- * @returns {{ kind: "memory" | "extension" | "sql", text: string, detail: string }}
+ * @returns {{ kind: "stale" | "download" | "memory" | "extension" | "sql", text: string, detail: string }}
  */
 export function describeError(error) {
   const detail = String(error instanceof Error ? error.message : error).trim();
+  if (error instanceof StaleDataError) {
+    return {
+      kind: "stale",
+      text: "The site's data was updated while this page was open, so your browser holds part of the previous copy. Reload the page to use the new data.",
+      detail,
+    };
+  }
+  if (error instanceof DownloadError) {
+    return {
+      kind: "download",
+      text: "A data file could not be downloaded. Check your connection, then run again.",
+      detail,
+    };
+  }
   if (/out of memory|memory access out of bounds|could not allocate|Aborted\(OOM\)|RangeError: Array buffer allocation/i.test(detail)) {
     return {
       kind: "memory",

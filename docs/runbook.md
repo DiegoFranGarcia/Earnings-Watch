@@ -274,11 +274,14 @@ the password is `TASK_HISTORY_PASSWORD` in the `airflow-internals` secret, set o
 **What runs.** After every `dbt_build` that passes, `publish_site` exports the dbt docs and the
 site's seven tables (Parquet) to `exports/site/runs/<run>/` and points
 `exports/site/current.json` at them, then starts the `Site` workflow (`.github/workflows/site.yml`).
-Its three jobs: `export` (role `gha-site`) checks every file against the export's manifest;
+Its four jobs: `export` (role `gha-site`) checks every file against the export's manifest;
 `app`, with no credentials, builds the site's app (`site/`) from that export and puts it beside
 the export's files; `deploy` publishes to GitHub Pages:
-<https://diegofrangarcia.github.io/Earnings-Watch/>. It also runs daily at 10:30 UTC, and when
-`site.yml`, `scripts/build_site.py` or anything in `site/` changes on main. See ADR 17 and 19.
+<https://diegofrangarcia.github.io/Earnings-Watch/>; `verify`, with no credentials, then asks
+the live site for what the SQL page downloads, as a browser does, and checks it against what was
+deployed (`scripts/verify_live_site.py`; its step summary lists every file and the bytes Pages
+sent). It also runs daily at 10:30 UTC, and when `site.yml`, `scripts/build_site.py`,
+`scripts/verify_live_site.py` or anything in `site/` changes on main. See ADR 17, 19 and 20.
 
 **Check it.** Every page's status line shows the latest quarter in the data and when the export
 ran; `site.json` says which export is live:
@@ -315,6 +318,23 @@ listed a file the site's layout does not know; in `app`, that the app's build wo
 one of the export's files. A failed `npm run build` usually means the export and the app disagree
 about a table: the `site` check on pull requests builds the same app against a fixture with the
 contract's shape. A file over the 20 MB budget stops the export itself, in `publish_site`.
+
+**If `verify` failed:** the site is already live, and it does not serve what was deployed. Read
+the job's summary before changing anything:
+- *site.json still says '<an earlier run>', not the deployed '<this run>'*: Pages kept serving
+  the previous `site.json` for over 12 minutes. Check by hand (`curl -s .../site.json`); if it
+  has changed since, rerun the job (`gh run rerun <run-id> --failed`).
+- *a file with another sha256, or HTTP 404*: Pages serves something other than the deploy. Rerun
+  the job once; if it fails again, redeploy (`gh workflow run site.yml`) and find out why.
+- *Pages now sends br (or zstd)*: Pages changed how it compresses. Browsers read it, this check
+  cannot: extend `decoded()` in `scripts/verify_live_site.py`.
+- *the SQL page says about N MB, but Pages sent M MB*: the estimate in
+  `site/src/routes/sql/+page.server.js` no longer matches what Pages sends: find out what
+  changed (a new DuckDB, Pages' compression) and correct the estimate.
+
+**The SQL page says "the site's data was updated... Reload the page"**: a table it downloaded
+did not match the live `site.json` (ADR 20), normally only in the minutes after a deploy. If it
+lasts, compare `site.json` with `verify`'s summary of the last deploy.
 
 **If the build stops at the DuckDB extension** (the SQL console, ADR 20):
 `site/scripts/fetch-duckdb-extensions.mjs` downloads DuckDB's Parquet extension from
