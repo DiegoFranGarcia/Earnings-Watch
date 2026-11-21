@@ -45,10 +45,10 @@ flowchart LR
         SI[("S3 silver<br/>typed ZSTD Parquet")]
     end
     DBT["Snowflake + dbt<br/>RAW → star schema → 3 marts"]
-    ST["Streamlit<br/>screener"]
+    SITE["Static site<br/>GitHub Pages, rebuilt per run"]
     SEC -->|"polite client<br/>≤ 5 req/s"| AF --> BR
     AF -. "submits, waits deferred" .-> EMR
-    BR --> EMR --> SI -->|"COPY INTO<br/>verified per quarter"| DBT --> ST
+    BR --> EMR --> SI -->|"COPY INTO<br/>verified per quarter"| DBT -->|"export, Parquet"| SITE
 ```
 
 Airflow orchestrates and never crunches data: downloads go to **bronze**, immutable and
@@ -166,8 +166,10 @@ uv run pytest -q                           # all tests (Spark tests need Java 17
 
 cd airflow && docker compose up -d         # Airflow on http://localhost:8080
 cd dbt && uv run dbt build                 # models and tests, on Snowflake
-uv run streamlit run app/streamlit_app.py  # the screener
 ```
+
+The public site is built in `site/` and deployed by `.github/workflows/site.yml`
+(docs/runbook.md, *The public site*).
 
 Infrastructure lives in `infra/` (Terraform); the Spark job in `spark/`, packaged per commit
 with `scripts/package_spark_job.sh`.
