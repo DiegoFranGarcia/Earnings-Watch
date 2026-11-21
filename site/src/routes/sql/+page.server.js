@@ -1,14 +1,30 @@
 import fs from "node:fs";
 import path from "node:path";
-import { liveExport } from "#lib/server/export.js";
+import zlib from "node:zlib";
+import { liveExport, tableFile } from "#lib/server/export.js";
 import schema from "#lib/generated/exports.json" with { type: "json" };
 
-/** The files a visitor downloads to start the console, measured when the site is built. */
-function downloadBytes() {
+/**
+ * About how much a visitor downloads to start the console, measured when the site is built:
+ * DuckDB's engine, its worker, its Parquet extension and every table, each gzip-compressed, as
+ * GitHub Pages serves them (2026-11-21: the extension, 3,045,039 bytes, arrived as 714,849; Node's
+ * gzip makes 708,117). The live site's check after each deploy (verify_live_site.py) compares
+ * this with what Pages actually sent.
+ * @param {string[]} tables
+ */
+function downloadBytes(tables) {
   const dist = path.resolve("node_modules/@duckdb/duckdb-wasm/dist");
-  const engine = ["duckdb-eh.wasm", "duckdb-browser-eh.worker.js"].map((f) => fs.statSync(path.join(dist, f)).size);
   const pinned = JSON.parse(fs.readFileSync(path.resolve("duckdb-extensions.json"), "utf8"));
-  return [...engine, ...pinned.extensions.map((/** @type {{ bytes: number }} */ e) => e.bytes)].reduce((a, b) => a + b, 0);
+  const files = [
+    path.join(dist, "duckdb-eh.wasm"),
+    path.join(dist, "duckdb-browser-eh.worker.js"),
+    ...pinned.extensions.map(
+      (/** @type {{ name: string }} */ e) =>
+        path.resolve("static/duckdb", pinned.duckdb, pinned.platform, `${e.name}.duckdb_extension.wasm`),
+    ),
+    ...tables.map(tableFile),
+  ];
+  return files.reduce((sum, file) => sum + zlib.gzipSync(fs.readFileSync(file)).length, 0);
 }
 
 export function load() {
@@ -21,6 +37,6 @@ export function load() {
       rows: files[`${t.name}.parquet`]?.rows ?? null,
       bytes: files[`${t.name}.parquet`]?.bytes ?? null,
     })),
-    downloadBytes: downloadBytes(),
+    downloadBytes: downloadBytes(schema.tables.map((t) => t.name)),
   };
 }

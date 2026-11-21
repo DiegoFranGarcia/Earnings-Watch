@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import decimal
+import hashlib
 import json
 import random
 import re
@@ -362,6 +363,11 @@ def rows(rng: random.Random) -> dict[str, list[dict]]:
     return out
 
 
+def described(path: Path) -> dict:
+    data = path.read_bytes()
+    return {"bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+
+
 def is_fixture(folder: Path) -> bool:
     try:
         return json.loads((folder / "site.json").read_text()).get("run_id") == "fixture"
@@ -390,12 +396,20 @@ def write(out_dir: Path) -> dict[str, int]:
         )
         pq.write_table(table, out_dir / "data" / f"{name}.parquet", compression="zstd")
         counts[name] = table.num_rows
+    # As build_site.py writes it: each file's bytes and sha256 (the SQL page checks every table
+    # it downloads against them), and the rows of each table.
+    files = {"dbt-docs.html": described(out_dir / "dbt-docs" / "index.html")}
+    for name, count in counts.items():
+        files[f"{name}.parquet"] = {
+            **described(out_dir / "data" / f"{name}.parquet"),
+            "rows": count,
+        }
     site = {
         "run_id": "fixture",
         "exported_at": "2026-11-19T06:05:21+00:00",
         "commit": "0" * 12,
         "folder": "exports/site/runs/fixture",
-        "files": {f"{n}.parquet": {"rows": c} for n, c in counts.items()},
+        "files": files,
     }
     (out_dir / "site.json").write_text(json.dumps(site, indent=2) + "\n")
     return counts

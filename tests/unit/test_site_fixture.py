@@ -6,7 +6,9 @@ the contract), and these tests say which side moved: the contract, or publish_si
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
+import json
 from pathlib import Path
 
 import pyarrow.parquet as pq
@@ -57,6 +59,20 @@ def test_the_fixture_is_laid_out_as_build_site_lays_out_an_export(tmp_path) -> N
     fixture.write(tmp_path / "f")
     assert (tmp_path / "f" / "dbt-docs" / "index.html").is_file()
     assert (tmp_path / "f" / "site.json").is_file()
+
+
+def test_the_fixtures_site_json_describes_every_file_as_build_site_does(tmp_path) -> None:
+    # The SQL page checks each table it downloads against these (ADR 20).
+    fixture.write(tmp_path / "f")
+    files = json.loads((tmp_path / "f" / "site.json").read_text())["files"]
+    places = {"dbt-docs.html": "dbt-docs/index.html"} | {
+        f"{t}.parquet": f"data/{t}.parquet" for t in site_export.EXPORT_MODELS
+    }
+    assert set(files) == set(places)
+    for name, place in places.items():
+        data = (tmp_path / "f" / place).read_bytes()
+        assert files[name]["bytes"] == len(data), name
+        assert files[name]["sha256"] == hashlib.sha256(data).hexdigest(), name
 
 
 def test_a_fixture_replaces_an_earlier_one_but_nothing_else(tmp_path) -> None:
