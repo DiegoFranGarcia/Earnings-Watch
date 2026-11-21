@@ -27,8 +27,12 @@ dev = [
     # dbt for the slice; same dbt-core as the Airflow image (airflow/dbt-requirements.txt).
     "dbt-core==1.12.6",
     "dbt-duckdb==1.11.0",
-    # The slice's dashboard.
-    "streamlit==1.65.0",
+    # Parquet: the silver writer, the site's export and its fixture (until 2026-11-21 it came in
+    # only through Streamlit; same version as before).
+    "pyarrow==25.0.1",
+    # Publish by hand runs site_export here: the Snowflake connector returns Arrow results only
+    # when pandas is importable (airflow/requirements.txt). Also came in through Streamlit.
+    "pandas==3.1.0",
     "pyspark==4.0.2",
     "snowflake-connector-python==4.7.3",
 ]
@@ -39,7 +43,7 @@ package = false  # a monorepo of runtimes, not an installable package
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = [".", "airflow/dags", "slice", "app", "spark"]
+src = [".", "airflow/dags", "slice", "spark"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "DTZ"]
@@ -52,5 +56,5 @@ known-third-party = ["airflow"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["airflow/dags", "slice", "app", "spark"]
+pythonpath = ["airflow/dags", "slice", "spark"]
 addopts = "-ra"

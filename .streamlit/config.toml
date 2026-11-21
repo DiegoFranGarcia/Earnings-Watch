@@ -1,3 +1,0 @@
-[browser]
-# Don't send usage statistics to Streamlit (same choice as dbt's anonymous stats).
-gatherUsageStats = false

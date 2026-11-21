@@ -22,48 +22,6 @@ CVE-2026-112939 | filelock | 2027-02-15 | Lock files in a single-user container 
 CVE-2026-112940 | filelock | 2027-02-15 | Lock files in a single-user container or developer machine; the fix needs major version 4.
 CVE-2026-114603 | opentelemetry-api | 2027-02-15 | Tracing and metrics export are off; its packages upgrade in lockstep.
 CVE-2026-126360 | opentelemetry-api | 2027-02-15 | Tracing and metrics export are off; its packages upgrade in lockstep.
-CVE-2026-112390 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-CVE-2026-112391 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-CVE-2026-112393 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-CVE-2026-112395 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-CVE-2026-112399 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-CVE-2026-112400 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-CVE-2026-112401 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-CVE-2026-112404 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-CVE-2026-112406 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-CVE-2026-112891 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-CVE-2026-112892 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-CVE-2026-112893 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-CVE-2026-112894 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-CVE-2026-112895 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-CVE-2026-112897 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-CVE-2026-112899 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-CVE-2026-112900 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-CVE-2026-128066 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-CVE-2026-128067 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-CVE-2026-96638 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-CVE-2026-96640 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-CVE-2026-96778 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-GHSA-78g4-xqwv-q3g8 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-PYSEC-2026-4326 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-PYSEC-2026-4327 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-PYSEC-2026-4328 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-PYSEC-2026-4329 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-PYSEC-2026-4330 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-PYSEC-2026-4331 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-PYSEC-2026-4332 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-PYSEC-2026-4333 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-PYSEC-2026-4334 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-PYSEC-2026-4335 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-PYSEC-2026-4336 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-PYSEC-2026-4337 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-PYSEC-2026-4338 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-PYSEC-2026-4339 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-PYSEC-2026-4340 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-PYSEC-2026-4341 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-PYSEC-2026-4342 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-PYSEC-2026-4343 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
-PYSEC-2026-4363 | pillow | 2027-02-15 | Local development only (pulled in by Streamlit); nothing processes images.
 PYSEC-2026-1795 | pip | 2027-02-15 | The package installer; nothing installs packages at runtime.
 PYSEC-2026-1796 | pip | 2027-02-15 | The package installer; nothing installs packages at runtime.
 PYSEC-2026-196 | pip | 2027-02-15 | The package installer; nothing installs packages at runtime.
