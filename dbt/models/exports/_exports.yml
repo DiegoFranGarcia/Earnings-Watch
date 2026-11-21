@@ -9,7 +9,9 @@ models:
     description: >
       Grain: one row per company and reporting view (first_reported or latest), at the
       company's most recent screened quarter, among companies whose latest screened quarter
-      became knowable within var site_recent_months of the build. With the current company
+      became knowable within var site_recent_months of the newest data in
+      mart_earnings_quality (not of the build's date, so the same data always gives the same
+      companies). With the current company
       name, its SEC industry (stg_sec__sic_codes) and filer size (filer_group, from
       filing_deadlines).
     config:
@@ -397,3 +399,37 @@ exposures:
       - ref('export_pipeline_health')
     owner:
       name: EarningsWatch
+
+unit_tests:
+  - name: screener_window_counts_back_from_the_newest_data
+    description: >
+      The newest row is known on 2025-06-30, so the window (18 months) starts on 2023-12-30,
+      whatever the date of the build: company 1 (2024-02-01) and company 4 (exactly
+      2023-12-30) are in, at their latest quarter; company 2 (2023-08-01) is out; company 3 is
+      the newest data but not screened. Counted back from the build's date (on or after
+      2026-11-21), every one of them would be out.
+    model: export_screener
+    overrides:
+      vars:
+        site_recent_months: 18
+    given:
+      - input: ref('mart_earnings_quality')
+        rows:
+          - {cik: 1, reporting_view: latest, period_end: "2023-09-30", known_at: "2023-11-01 09:00:00", is_screened: true, is_flagged: false}
+          - {cik: 1, reporting_view: latest, period_end: "2023-12-31", known_at: "2024-02-01 09:00:00", is_screened: true, is_flagged: false}
+          - {cik: 2, reporting_view: latest, period_end: "2023-06-30", known_at: "2023-08-01 09:00:00", is_screened: true, is_flagged: false}
+          - {cik: 3, reporting_view: latest, period_end: "2025-03-31", known_at: "2025-06-30 18:00:00", is_screened: false, is_flagged: false}
+          - {cik: 4, reporting_view: latest, period_end: "2023-09-30", known_at: "2023-12-30 00:00:00", is_screened: true, is_flagged: false}
+      - input: ref('dim_company')
+        rows:
+          - {cik: 1, company_name: "Company One", filer_status: "1-LAF", is_current: true}
+      - input: ref('filing_deadlines')
+        rows:
+          - {filer_status: "1-LAF", form: "10-K", filer_group: large_accelerated}
+      - input: ref('stg_sec__sic_codes')
+        rows:
+          - {sic: 1000, industry_group: Mining}
+    expect:
+      rows:
+        - {cik: 1, reporting_view: latest, period_end: "2023-12-31"}
+        - {cik: 4, reporting_view: latest, period_end: "2023-09-30"}

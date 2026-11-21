@@ -1,12 +1,24 @@
 -- The screener page: each company still filing, at its most recent screened quarter, in both
 -- reporting views, with its industry and filer size. Part of the public site's export contract
 -- (ADR 17): only what the page shows. "Still filing" means the quarter became knowable within
--- var site_recent_months of the build.
-with quarters as (
-    select * from {{ ref('mart_earnings_quality') }}
+-- var site_recent_months of the newest data in the warehouse, not of the build's date: the
+-- screener changes only when new SEC data does, so every build of the same data gives the same
+-- companies (on 2026-11-21 one aged out overnight, with no new data, and its company pages,
+-- still in yesterday's tables, failed their relationship tests).
+with newest as (
+    select max(known_at)::date as newest_known_on
+    from {{ ref('mart_earnings_quality') }}
+),
+
+quarters as (
+    -- Aliased: in a dbt unit test the ref is a CTE with another name.
+    select quality.*
+    from {{ ref('mart_earnings_quality') }} as quality
+    cross join newest
     where
-        is_screened
-        and known_at >= dateadd(month, -{{ var('site_recent_months') }}, current_date())
+        quality.is_screened
+        and quality.known_at
+        >= dateadd(month, -{{ var('site_recent_months') }}, newest.newest_known_on)
 ),
 
 latest as (

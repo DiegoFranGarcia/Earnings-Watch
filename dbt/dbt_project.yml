@@ -84,7 +84,8 @@ vars:
   emr_dollars_per_gb_hour: 0.0057785
   emr_dollars_per_storage_gb_hour: 0.000111
   # The public site's export (models/exports): a company counts as still filing when its latest
-  # screened quarter became knowable within this many months; quarters before the first are
+  # screened quarter became knowable within this many months of the newest data (not of today,
+  # so the screener changes only when the data does); quarters before the first are
   # left out of the company page; the restatements page lists this many of the largest.
   site_recent_months: 18
   site_first_quarter: "2015-01-01"

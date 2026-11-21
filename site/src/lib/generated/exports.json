@@ -3,7 +3,7 @@
  "tables": [
   {
    "name": "export_screener",
-   "description": "Grain: one row per company and reporting view (first_reported or latest), at the company's most recent screened quarter, among companies whose latest screened quarter became knowable within var site_recent_months of the build. With the current company name, its SEC industry (stg_sec__sic_codes) and filer size (filer_group, from filing_deadlines).",
+   "description": "Grain: one row per company and reporting view (first_reported or latest), at the company's most recent screened quarter, among companies whose latest screened quarter became knowable within var site_recent_months of the newest data in mart_earnings_quality (not of the build's date, so the same data always gives the same companies). With the current company name, its SEC industry (stg_sec__sic_codes) and filer size (filer_group, from filing_deadlines).",
    "columns": [
     {
      "name": "cik",
