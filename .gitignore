@@ -48,5 +48,7 @@ site/node_modules/
 site/.svelte-kit/
 site/build/
 site/fixture/
+# DuckDB's extensions, downloaded and verified at build (site/duckdb-extensions.json).
+site/static/duckdb/
 site/test-results/
 site/playwright-report/

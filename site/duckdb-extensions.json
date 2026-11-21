@@ -1,0 +1,14 @@
+{
+  "comment": "DuckDB extensions the SQL page serves from this site (it makes no third-party requests). Each must match the DuckDB inside @duckdb/duckdb-wasm, so bump them together; scripts/fetch-duckdb-extensions.mjs checks the pairing and every file's size and sha256.",
+  "duckdb_wasm": "1.32.0",
+  "duckdb": "v1.4.3",
+  "platform": "wasm_eh",
+  "extensions": [
+    {
+      "name": "parquet",
+      "url": "https://extensions.duckdb.org/v1.4.3/wasm_eh/parquet.duckdb_extension.wasm",
+      "bytes": 3045039,
+      "sha256": "22765c8f7dc741cda2b571a66ac7bb355295d7d69a6c37e5315b265672984f55"
+    }
+  ]
+}

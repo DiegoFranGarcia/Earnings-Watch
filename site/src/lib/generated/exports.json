@@ -1,0 +1,552 @@
+{
+ "source": "dbt/models/exports/_exports.yml",
+ "tables": [
+  {
+   "name": "export_screener",
+   "description": "Grain: one row per company and reporting view (first_reported or latest), at the company's most recent screened quarter, among companies whose latest screened quarter became knowable within var site_recent_months of the build. With the current company name, its SEC industry (stg_sec__sic_codes) and filer size (filer_group, from filing_deadlines).",
+   "columns": [
+    {
+     "name": "cik",
+     "type": "bigint",
+     "description": null
+    },
+    {
+     "name": "reporting_view",
+     "type": "varchar",
+     "description": null
+    },
+    {
+     "name": "period_end",
+     "type": "date",
+     "description": null
+    },
+    {
+     "name": "fiscal_year",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "fiscal_quarter",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "known_at",
+     "type": "timestamp_ntz",
+     "description": null
+    },
+    {
+     "name": "sic",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "industry_title",
+     "type": "varchar",
+     "description": null
+    },
+    {
+     "name": "filer_status",
+     "type": "varchar",
+     "description": null
+    },
+    {
+     "name": "ttm_net_income",
+     "type": "decimal(30, 4)",
+     "description": null
+    },
+    {
+     "name": "prior_ttm_net_income",
+     "type": "decimal(30, 4)",
+     "description": null
+    },
+    {
+     "name": "ttm_operating_cash_flow",
+     "type": "decimal(30, 4)",
+     "description": null
+    },
+    {
+     "name": "prior_ttm_operating_cash_flow",
+     "type": "decimal(30, 4)",
+     "description": null
+    },
+    {
+     "name": "average_total_assets",
+     "type": "decimal(30, 4)",
+     "description": null
+    },
+    {
+     "name": "accruals",
+     "type": "decimal(30, 4)",
+     "description": null
+    },
+    {
+     "name": "accruals_to_assets",
+     "type": "double",
+     "description": null
+    },
+    {
+     "name": "is_flagged",
+     "type": "boolean",
+     "description": null
+    },
+    {
+     "name": "is_implausible",
+     "type": "boolean",
+     "description": "Net income or operating cash flow over the year above var implausible_multiple_of_assets times average total assets: usually a units mistake."
+    },
+    {
+     "name": "company_name",
+     "type": "varchar",
+     "description": null
+    },
+    {
+     "name": "industry_group",
+     "type": "varchar",
+     "description": "The SEC office that reviews the industry, as a plain name (stg_sec__sic_codes); Unknown if none."
+    },
+    {
+     "name": "filer_group",
+     "type": "varchar",
+     "description": null
+    },
+    {
+     "name": "screener_key",
+     "type": "varchar",
+     "description": null
+    }
+   ]
+  },
+  {
+   "name": "export_company_quarters",
+   "description": "Grain: one row per screener company and quarter end, from var site_first_quarter: net income and operating cash flow (true three-month values) as first reported and latest, whether each was materially restated, and whether any was derived from year-to-date figures.",
+   "columns": [
+    {
+     "name": "cik",
+     "type": "bigint",
+     "description": null
+    },
+    {
+     "name": "period_end",
+     "type": "date",
+     "description": null
+    },
+    {
+     "name": "fiscal_year",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "fiscal_quarter",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "net_income_first_reported",
+     "type": "decimal(28, 4)",
+     "description": null
+    },
+    {
+     "name": "net_income_latest",
+     "type": "decimal(28, 4)",
+     "description": null
+    },
+    {
+     "name": "operating_cash_flow_first_reported",
+     "type": "decimal(28, 4)",
+     "description": null
+    },
+    {
+     "name": "operating_cash_flow_latest",
+     "type": "decimal(28, 4)",
+     "description": null
+    },
+    {
+     "name": "is_net_income_restated",
+     "type": "boolean",
+     "description": null
+    },
+    {
+     "name": "is_operating_cash_flow_restated",
+     "type": "boolean",
+     "description": null
+    },
+    {
+     "name": "is_derived",
+     "type": "boolean",
+     "description": null
+    },
+    {
+     "name": "company_quarter_key",
+     "type": "varchar",
+     "description": null
+    }
+   ]
+  },
+  {
+   "name": "export_company_history",
+   "description": "Grain: one row per version of a screener company (dim_company): its name, industry and filer status over time, and when each version began and ended.",
+   "columns": [
+    {
+     "name": "company_key",
+     "type": "varchar",
+     "description": null
+    },
+    {
+     "name": "cik",
+     "type": "bigint",
+     "description": null
+    },
+    {
+     "name": "version_number",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "company_name",
+     "type": "varchar",
+     "description": null
+    },
+    {
+     "name": "sic",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "industry_title",
+     "type": "varchar",
+     "description": null
+    },
+    {
+     "name": "filer_status",
+     "type": "varchar",
+     "description": null
+    },
+    {
+     "name": "valid_from",
+     "type": "timestamp_ntz",
+     "description": null
+    },
+    {
+     "name": "valid_to",
+     "type": "timestamp_ntz",
+     "description": null
+    },
+    {
+     "name": "is_current",
+     "type": "boolean",
+     "description": null
+    }
+   ]
+  },
+  {
+   "name": "export_restatements_by_year",
+   "description": "Grain: one row per year of first material change, restatement kind and metric: how many restatements, at how many companies, the median absolute change and the median days to the first change, with the rate's denominator. Likely scale errors are excluded.",
+   "columns": [
+    {
+     "name": "change_year",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "restatement_kind",
+     "type": "varchar",
+     "description": null
+    },
+    {
+     "name": "metric",
+     "type": "varchar",
+     "description": null
+    },
+    {
+     "name": "restatements",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "companies",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "reporting_companies",
+     "type": "integer",
+     "description": "Companies whose 10-K or 10-Q filings that year report the metric in a form the models read: the denominator of the share that restated."
+    },
+    {
+     "name": "median_abs_restatement_pct",
+     "type": "double",
+     "description": null
+    },
+    {
+     "name": "median_days_to_first_change",
+     "type": "decimal(10, 1)",
+     "description": null
+    },
+    {
+     "name": "companies_by_first_kind",
+     "type": "integer",
+     "description": "Companies counted once per year and metric, under their first kind (correction, then recast, then tag_switch): these stack to the companies that changed the metric."
+    },
+    {
+     "name": "restatement_group_key",
+     "type": "varchar",
+     "description": null
+    }
+   ]
+  },
+  {
+   "name": "export_restatements_largest",
+   "description": "Grain: one row per restatement (mart_restatements): the var site_largest_restatements largest material restatements of net income, revenue and operating cash flow by absolute amount, and the var site_largest_amendments largest corrections by the change as a share of total assets (changes of at least var site_amendment_min_change). Likely scale errors are excluded.",
+   "columns": [
+    {
+     "name": "restatement_key",
+     "type": "varchar",
+     "description": null
+    },
+    {
+     "name": "cik",
+     "type": "bigint",
+     "description": null
+    },
+    {
+     "name": "company_name",
+     "type": "varchar",
+     "description": null
+    },
+    {
+     "name": "metric",
+     "type": "varchar",
+     "description": null
+    },
+    {
+     "name": "period_end",
+     "type": "date",
+     "description": null
+    },
+    {
+     "name": "duration_quarters",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "restatement_kind",
+     "type": "varchar",
+     "description": null
+    },
+    {
+     "name": "first_change_form",
+     "type": "varchar",
+     "description": null
+    },
+    {
+     "name": "first_reported_at",
+     "type": "timestamp_ntz",
+     "description": null
+    },
+    {
+     "name": "first_change_at",
+     "type": "timestamp_ntz",
+     "description": null
+    },
+    {
+     "name": "days_to_first_change",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "first_reported_value",
+     "type": "decimal(28, 4)",
+     "description": null
+    },
+    {
+     "name": "latest_value",
+     "type": "decimal(28, 4)",
+     "description": null
+    },
+    {
+     "name": "restatement_amount",
+     "type": "decimal(30, 4)",
+     "description": null
+    },
+    {
+     "name": "restatement_pct",
+     "type": "double",
+     "description": null
+    },
+    {
+     "name": "total_assets",
+     "type": "decimal(28, 4)",
+     "description": "Total assets at the period's end, after restatements; null if not reported."
+    },
+    {
+     "name": "change_to_assets",
+     "type": "double",
+     "description": "The absolute amount changed as a share of total_assets."
+    },
+    {
+     "name": "selected_by",
+     "type": "varchar",
+     "description": "Which list brought the row in, amount, share_of_assets, or both."
+    }
+   ]
+  },
+  {
+   "name": "export_filing_timeliness",
+   "description": "Grain: one row per filer group, form (10-K or 10-Q) and period year: original filings on time, within a late-filing notice's extension, and late; how long filers took (exact medians per group); the group's deadline and extension in days. Notices are known only from 2025 (notice_data_available): earlier years count filings that used an extension as late, so only on-time against not on-time compares across all years.",
+   "columns": [
+    {
+     "name": "filer_group",
+     "type": "varchar",
+     "description": "large_accelerated, accelerated or non_accelerated, by filing deadline."
+    },
+    {
+     "name": "form",
+     "type": "varchar",
+     "description": null
+    },
+    {
+     "name": "period_year",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "filings",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "on_time_filings",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "within_extension_filings",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "late_filings",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "late_notices",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "notice_data_available",
+     "type": "boolean",
+     "description": null
+    },
+    {
+     "name": "deadline_days",
+     "type": "integer",
+     "description": "Days after the period end the filing is due (before moving off closed days)."
+    },
+    {
+     "name": "extension_days",
+     "type": "integer",
+     "description": "Calendar days a late-filing notice adds (Rule 12b-25)."
+    },
+    {
+     "name": "median_days_to_file",
+     "type": "decimal(10, 1)",
+     "description": null
+    },
+    {
+     "name": "p90_days_to_file",
+     "type": "decimal(10, 1)",
+     "description": null
+    },
+    {
+     "name": "median_days_past_due_when_late",
+     "type": "decimal(10, 1)",
+     "description": null
+    },
+    {
+     "name": "on_time_share",
+     "type": "double",
+     "description": null
+    },
+    {
+     "name": "timeliness_key",
+     "type": "varchar",
+     "description": null
+    }
+   ]
+  },
+  {
+   "name": "export_pipeline_health",
+   "description": "Grain: one row per calendar day, the last 30: mart_pipeline_health, whole.",
+   "columns": [
+    {
+     "name": "date_day",
+     "type": "date",
+     "description": null
+    },
+    {
+     "name": "latest_index_day",
+     "type": "date",
+     "description": null
+    },
+    {
+     "name": "index_lag_days",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "dbt_invocations",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "tests_run",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "tests_passed",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "tests_warned",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "tests_failed",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "models_failed",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "test_pass_rate",
+     "type": "double",
+     "description": null
+    },
+    {
+     "name": "volume_checks",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "volume_failures",
+     "type": "integer",
+     "description": null
+    },
+    {
+     "name": "dollars",
+     "type": "decimal(18, 6)",
+     "description": null
+    }
+   ]
+  }
+ ]
+}
