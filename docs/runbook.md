@@ -103,6 +103,17 @@ the load and dbt follow.
 - **Run one model and its tests:** `uv run dbt build -s <model>`.
 - **A test failed:** read the rows, never just raise the threshold. Problems in filer data warn;
   problems in our logic fail (ADR 8).
+- **How `dbt_build` orders tests:** each model's tests run right after it (`build.<model>.test`),
+  except a test that reads several models, such as a relationship test, which is its own task
+  (`build.<test>_test`) after all of them, as in `dbt build`. Such a test does not hold back the
+  models built from its parents, but `publish` waits for every test, so a failure still keeps
+  the site on its last good export. `tests/dags/test_dbt_build_order.py` holds both.
+- **The site's screener window** (`site_recent_months`) counts back from the newest
+  `known_at` in `mart_earnings_quality`, not from today: the screener only changes when new
+  SEC data arrives.
+- **To publish the same day after a failed build:** once the cause is fixed, rebuild what the
+  failure held back with `uv run dbt build -s <models>` from your Mac (the host's database, ADR
+  18), then *Publish by hand* (under "The public site").
 
 ## Releases
 

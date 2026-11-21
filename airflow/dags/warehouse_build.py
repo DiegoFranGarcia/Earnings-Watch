@@ -7,8 +7,11 @@ Triggered by either RAW asset (a loaded FSDS quarter or a loaded day of the dail
 2. Source freshness: warns on stale RAW data.
 3. Cosmos renders every dbt model and seed as its own Airflow task, with that model's tests
    right after it, so a failing test stops only what depends on it and a single model can be
-   retried. Cosmos reads a pre-built manifest (target/manifest.json), so parsing this file stays
-   instant: rebuild the manifest with `dbt parse` after changing dbt.
+   retried. A test that reads several models (a relationship test) runs as its own task once
+   all of them are built, as in `dbt build`: run with one of them, it would compare a rebuilt
+   table with another not yet rebuilt. `publish` waits for every test either way. Cosmos reads
+   a pre-built manifest (target/manifest.json), so parsing this file stays instant: rebuild the
+   manifest with `dbt parse` after changing dbt.
 
 The file is deliberately not named dbt_*.py: dbt imports every top-level module named dbt_* on
 the Python path (its plugin discovery), and this folder is on the path in tests and in Airflow.
@@ -111,6 +114,8 @@ def dbt_build():
         render_config=RenderConfig(
             load_method=LoadMode.DBT_MANIFEST,
             test_behavior=TestBehavior.AFTER_EACH,
+            # See 3. above; tests/dags/test_dbt_build_order.py checks the order.
+            should_detach_multiple_parents_tests=True,
         ),
         operator_args={
             "pool": "snowflake",
