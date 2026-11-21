@@ -10,7 +10,8 @@ DuckDB-WASM for it. Checked on 2026-11-20, before building on it:
 - Its engine is 34.2 MB (about 7.6 MB gzip-compressed), its worker 0.8 MB.
 - It ships with no Parquet reader: the first `read_parquet` downloads DuckDB's Parquet extension
   from `extensions.duckdb.org`. The site makes no third-party requests (ADR 17), and its
-  Content-Security-Policy (`connect-src 'self'`) would block that download anyway.
+  Content-Security-Policy (`connect-src 'self'`) would block that download anyway. (Corrected
+  2026-11-21: that policy governs the page, not DuckDB's worker; see the last amendment.)
 - GitHub Pages cannot send response headers, so the policy is the `<meta>` tag SvelteKit writes
   into each page, set once for the whole site (`kit.csp`). A page given two policies obeys both,
   so a second tag can only tighten the first, never loosen it.
@@ -96,3 +97,21 @@ gets through, with a plain message instead of a failed query or, worse, a query 
 two exports; and how Pages answers ranges no longer matters. The cost: every table is downloaded
 on Start (about 5 MB of the 14). The tests' server now compresses as Pages does, and the check
 after each deploy covers what a local server cannot show.
+
+## Amendment, 2026-11-21: the page's policy does not reach DuckDB's worker
+
+Found in a security review that day, tested in Chromium against the built site: the `<meta>`
+policy governs the page, not DuckDB's worker. A worker loaded from its own address takes its policy
+from its own response, and GitHub Pages sends none, so `connect-src 'self'` does not keep the
+worker's requests on this site. What does is that everything DuckDB needs is served here and its
+`custom_extension_repository` points here; the site itself still makes no third-party requests.
+
+Consequence, accepted: a visitor's own query can name another site (`read_parquet('https://...')`)
+and their browser will request it. Only the visitor's own browser does so, for a query they ran;
+shared links never run on their own, and nothing of this site's is exposed.
+
+If that is ever unwanted, the fix is tested: after creating the views, `SET allowed_paths` to the
+seven tables' files, `SET enable_external_access = false` and `SET lock_configuration = true`.
+Tables, joins and the files' own names still work; a read from another site fails with a
+permission error and makes no request, and the settings cannot be unlocked from a query. The
+page's error messages would need to recognise the new "disabled" error.

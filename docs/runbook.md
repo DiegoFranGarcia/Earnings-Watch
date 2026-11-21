@@ -81,6 +81,9 @@ build stops and **the marts keep their last good data**. Every result is in `AUD
 docker compose exec airflow-scheduler airflow dags trigger dbt_build -c '{"accept_volume": true}'
 ~~~
 
+Drilled on 2026-11-21: the gate failed, and the marts and the live site kept their last good
+data ([chaos drills](chaos.md)).
+
 ## Reprocess an FSDS quarter from the SEC
 
 Rerun `sec_fsds_quarterly` for the quarter's logical date. If the SEC republished the file, the
@@ -161,15 +164,41 @@ the new one failed before anything else:
 scripts/host_exec.sh 'journalctl -u earningswatch --since today --no-pager | tail -60'
 ~~~
 
+## Run a DAG on the host and wait for it
+
+From the Mac, in the repository. Triggering returns at once; to wait, ask for the run's state in a
+loop. `dags state` prints the state first, then the run's conf if it has one
+(`success, {"months": "2026-11"}`), so match the start of the line, not the whole line. (On the
+host, `dags list-runs -o plain` printed nothing; ask for a named run instead.)
+
+~~~bash
+af='docker compose -p earningswatch -f /opt/earningswatch/deploy/compose.yaml --env-file /run/earningswatch/airflow.env exec -T airflow-scheduler airflow'
+dag=snowflake_load_daily_index
+run="manual__reload-$(date -u +%Y%m%dT%H%M%SZ)"
+scripts/host_exec.sh "$af dags trigger $dag -r $run -c '{\"months\": \"2026-11\"}'"
+while :; do
+  s="$(scripts/host_exec.sh "$af dags state $dag $run" 2>/dev/null | grep -oE '^(queued|running|success|failed)\b' | tail -1)"
+  echo "$(date -u +%H:%M:%S) $dag: ${s:-no answer yet}"
+  { [ "$s" = success ] || [ "$s" = failed ]; } && break
+  sleep 30
+done
+scripts/host_exec.sh "$af tasks states-for-dag-run $dag $run -o plain"
+~~~
+
+Name drill runs `manual__drill-<what>-<date>`, so they can be told apart from real runs.
+
 ## Merging a pull request
 
-`main` takes changes only through pull requests whose required checks passed: `lint-and-test`,
-`image-tests`, `security`, `dbt-slim-ci` and `terraform` (`.github/rulesets/main.json`).
+`main` takes changes only through pull requests whose six required checks passed on the branch
+as it is, up to date with main: `lint-and-test`, `image-tests`, `security`, `dbt-slim-ci`,
+`terraform` and `site` (`.github/rulesets/main.json`). Squash is the only merge allowed. GitHub
+enforces this, so either way of merging is safe:
 
-- **Merge with `scripts/merge_when_green.sh`**, from the pull request's branch, after pushing.
-  It waits for CI on the exact commit you pushed, watches it, and squash-merges only if it
-  passed. Waiting on the branch instead is not enough: after a second push, the branch's newest
-  run can still be the first push's.
+- **The button,** once every check is green; then `git switch main && git pull --ff-only`.
+- **`scripts/merge_when_green.sh`**, from the pull request's branch, after pushing: it waits for
+  the CI workflow on the exact commit you pushed and squash-merges only if it passed, so you need
+  not watch. It does not wait for Site CI (the `site` check): if that is still running, GitHub
+  refuses the merge; wait for it and run the script again.
 - **"The head branch is not up to date":** `gh pr update-branch`, wait for the checks again, merge.
 - **An emergency that cannot wait for the checks:** Settings, Rules, Rulesets, `main`: set
   Enforcement to Disabled, merge, say why in the pull request, then restore the ruleset exactly
