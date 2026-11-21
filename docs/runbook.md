@@ -305,6 +305,13 @@ one of the export's files. A failed `npm run build` usually means the export and
 about a table: the `site` check on pull requests builds the same app against a fixture with the
 contract's shape. A file over the 20 MB budget stops the export itself, in `publish_site`.
 
+**If the build stops at the DuckDB extension** (the SQL console, ADR 20):
+`site/scripts/fetch-duckdb-extensions.mjs` downloads DuckDB's Parquet extension from
+extensions.duckdb.org and checks it against `site/duckdb-extensions.json`. A size or sha256
+mismatch means the file changed upstream: do not just update the hash; find out why first. "update
+both together" means `@duckdb/duckdb-wasm` was upgraded (Dependabot) without the extensions: pin
+the new DuckDB version's extension, its size and sha256, in the same pull request.
+
 **If the scheduled runs stopped:** GitHub disables a public repository's schedules after 60
 days without activity. `gh workflow enable site.yml` turns it back on.
 

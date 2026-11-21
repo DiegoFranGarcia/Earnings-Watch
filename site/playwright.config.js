@@ -14,9 +14,15 @@ export default defineConfig({
   use: { baseURL: "http://localhost:4173/Earnings-Watch/", trace: "retain-on-failure" },
   // PW_CHROMIUM_PATH: a Chromium already on the machine, for running these where Playwright
   // cannot download its own; unset in CI, where it installs one.
-  projects: [{
-    name: "chromium",
-    use: { ...devices["Desktop Chrome"], launchOptions: { executablePath: process.env.PW_CHROMIUM_PATH || undefined } },
-  }],
+  projects: [
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"], launchOptions: { executablePath: process.env.PW_CHROMIUM_PATH || undefined } },
+    },
+    // The SQL console runs DuckDB's WebAssembly in a worker, where browsers differ most: its
+    // tests run in all three engines.
+    { name: "firefox", testMatch: "sql.spec.js", use: { ...devices["Desktop Firefox"] } },
+    { name: "webkit", testMatch: "sql.spec.js", use: { ...devices["Desktop Safari"] } },
+  ],
   webServer: { command: "node tests/serve.mjs", url: "http://localhost:4173/Earnings-Watch/", reuseExistingServer: !process.env.CI },
 });
