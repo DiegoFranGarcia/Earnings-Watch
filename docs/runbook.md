@@ -16,8 +16,11 @@ Airflow's records -> record_task_history (09:30 UTC daily) -> AUDIT.AIRFLOW_TASK
 ~~~
 
 - Failures alert the Discord channel after the task's last retry, with a link to its log.
-- sec_daily_index must finish by 12:00 UTC, or a deadline alert fires (nothing may have failed:
+- sec_daily_index must finish by 09:00 UTC, or a deadline alert fires (nothing may have failed:
   look for a run that is stuck or never started).
+- Every morning sec_daily_index also checks that each business day of the last four weeks has its
+  index in bronze (`check_landed_days`), and fails while one does not: see *A day of the daily
+  index is missing*.
 
 ## Running locally
 
@@ -65,6 +68,34 @@ Each quarter or month is one transaction: delete, `COPY ... FORCE = TRUE`, count
 if the count matches (Spark's reconciliation record for FSDS, the files themselves for the daily
 index). A mismatch fails immediately, with no retry, and rolls back: RAW is unchanged. Investigate
 the source before rerunning. `dbt_build` follows automatically.
+
+## A day of the daily index is missing
+
+The alert: `sec_daily_index › check_landed_days failed`, "1 business day has no daily index in
+bronze: 2026-11-05 (Thu)". That day's own run failed for good, or never ran, and the runs since
+each fetch only their own day, so the gap stays until it is repaired. The alert repeats every
+morning while the day is within the last four weeks; older gaps show only in
+`scripts/reconcile_bronze.py`. Today's data is not held back.
+
+1. **Did EDGAR publish it?** Open the quarter's folder in a browser, for example
+   https://www.sec.gov/Archives/edgar/daily-index/2026/QTR4/, and look for `master.20261105.idx`.
+2. **It is there:** land it with a run whose logical date is the next day at 06:00 UTC (a run
+   fetches the day before its logical date). The landing announces the day; the month's reload,
+   `dbt_build` and the site follow by themselves. Wait for it as in *Run a DAG on the host and
+   wait for it*. Its deadline (three hours after the logical date) has long passed, so a deadline
+   alert also arrives: expected.
+
+   ~~~bash
+   af='docker compose -p earningswatch -f /opt/earningswatch/deploy/compose.yaml --env-file /run/earningswatch/airflow.env exec -T airflow-scheduler airflow'
+   scripts/host_exec.sh "$af dags trigger sec_daily_index -r manual__repair-2026-11-05 --logical-date 2026-11-06T06:00:00+00:00"
+   ~~~
+
+3. **It is not there:** EDGAR was closed that day. Add it to `CLOSURES` in
+   `scripts/make_sec_closed_days.py` with the SEC's announcement as its source, run
+   `uv run python scripts/make_sec_closed_days.py`, and merge: filing deadlines on that day move,
+   and the check stops reporting it.
+
+Found and repaired this way on 2026-11-21 ([the incident](incidents/2026-11-05.md)).
 
 ## A volume check failed
 
