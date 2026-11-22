@@ -18,7 +18,7 @@
   <Hero summary={data.overview.summary} {view} onview={(v) => (view = v)} />
   <QuoteBoard facts={data.facts} dollars30d={data.overview.pipeline.dollars_30d} />
   <FlaggedTable rows={data.overview.rows} industries={data.overview.industries} {view} />
-  <PipelineStrip pipeline={data.overview.pipeline} exportedAt={data.status.exported_at} />
+  <PipelineStrip exportedAt={data.status.exported_at} />
   <footer class="muted">
     <p>A screen for where to look harder, not investment advice. Source: SEC Financial Statement Data Sets.</p>
     <p>

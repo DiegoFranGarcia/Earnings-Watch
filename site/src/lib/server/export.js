@@ -111,17 +111,11 @@ export async function overview() {
     };
   });
 
-  const ran = health.filter((d) => d.dbt_invocations > 0).sort((a, b) => (iso(a.date_day) < iso(b.date_day) ? 1 : -1));
-  const last = ran[0];
   return {
     summary,
     rows,
     industries: [...new Set(rows.map((r) => r.industry))].sort(),
     pipeline: {
-      last_run_day: last ? iso(last.date_day) : null,
-      tests_passed: last?.tests_passed ?? null,
-      tests_failed: last?.tests_failed ?? null,
-      days_with_runs: ran.length,
       // Snowflake and EMR only (mart_pipeline_costs), over the 30 days the export covers.
       dollars_30d: health.reduce((sum, d) => sum + (d.dollars ?? 0), 0),
     },

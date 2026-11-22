@@ -68,6 +68,28 @@ test("the view toggle changes the number, its universe and its name together", a
   await expect(page.locator(".shown")).toHaveText("Showing 10 of 10");
 });
 
+test("the overview draws the pipeline in order, with the check that holds this site", async ({ page }) => {
+  await open(page);
+  const flow = page.getByRole("list").filter({ hasText: "Every check passes?" });
+  await expect(flow.locator(":scope > li > b")).toHaveText([
+    "SEC EDGAR", "S3", "Spark on EMR", "Snowflake", "dbt", "Every check passes?", "This site",
+  ]);
+  await expect(flow).toContainText("No: this site keeps its last good data.");
+  // A day's test count adds up every dbt run of the day, so the overview shows none.
+  await expect(flow).not.toContainText("tests passed");
+  await page.getByRole("link", { name: "See the full pipeline" }).click();
+  await expect(page).toHaveURL(/\/Earnings-Watch\/pipeline\/$/);
+});
+
+test("on a phone the pipeline reads top to bottom, within the screen", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page);
+  const flow = page.getByRole("list").filter({ hasText: "Every check passes?" });
+  await expect(flow).toHaveCSS("flex-direction", "column");
+  const fits = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+  expect(fits).toBe(true);
+});
+
 test("search and industry filters narrow the table", async ({ page }) => {
   await open(page);
   await page.getByLabel("Search a company").fill("Fixture Co 40");
