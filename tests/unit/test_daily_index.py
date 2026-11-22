@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from pathlib import Path
 
 import pytest
 
@@ -119,6 +120,90 @@ def test_a_missing_index_is_only_final_after_the_grace_period() -> None:
     day = dt.date(2026, 10, 23)
     assert di.missing_is_final(day, _utc(2026, 10, 24, 6)) is False  # it may still come
     assert di.missing_is_final(day, _utc(2026, 10, 27, 0)) is True  # it never will
+
+
+# -- has every recent business day landed? ----------------------------------------------
+
+SEED = Path(__file__).resolve().parents[2] / "dbt" / "seeds" / "sec_closed_days.csv"
+
+
+def _receipts(days) -> set[str]:
+    return {di.receipt_key(day) for day in days} | {di.bronze_key(day) for day in days}
+
+
+def test_the_receipt_is_the_manifest_bronze_writes() -> None:
+    from earningswatch import bronze
+
+    day = dt.date(2026, 11, 5)
+    assert di.receipt_key(day) == bronze.manifest_key(di.bronze_key(day))
+
+
+def test_the_check_covers_four_weeks_of_business_days_past_the_grace() -> None:
+    days = di.days_to_check(_utc(2026, 11, 21, 6, 30))
+    # From 2026-10-24 (a Saturday, so the 26th), to 2026-11-17: the 18th to the 20th may
+    # still be published. Weekends and Veterans Day (11-11) are not business days.
+    assert days[0] == dt.date(2026, 10, 26)
+    assert days[-1] == dt.date(2026, 11, 17)
+    assert dt.date(2026, 11, 11) not in days
+    assert all(day.weekday() < 5 for day in days)
+    assert len(days) == 16
+    assert dt.date(2026, 11, 5) in days  # the day lost on 2026-11-06 would have been reported
+
+
+def test_the_check_starts_no_earlier_than_the_history() -> None:
+    days = di.days_to_check(_utc(2025, 1, 10, 6))
+    assert days == [dt.date(2025, 1, 2), dt.date(2025, 1, 3), dt.date(2025, 1, 6)]
+    assert di.days_to_check(_utc(2025, 1, 2, 6)) == []
+
+
+def test_a_day_without_its_receipt_is_missing() -> None:
+    days = di.days_to_check(_utc(2026, 11, 21, 6, 30))
+    landed = [day for day in days if day != dt.date(2026, 11, 5)]
+    assert di.missing_days(days, _receipts(landed), closed=set()) == [dt.date(2026, 11, 5)]
+    assert di.missing_days(days, _receipts(days), closed=set()) == []
+
+
+def test_a_file_without_its_receipt_has_not_landed() -> None:
+    # The receipt is written last: a file alone is an unfinished landing.
+    day = dt.date(2026, 11, 5)
+    assert di.missing_days([day], {di.bronze_key(day)}, closed=set()) == [day]
+
+
+def test_a_day_edgar_was_closed_is_not_missing() -> None:
+    day = dt.date(2025, 12, 24)
+    assert di.missing_days([day], set(), closed={day}) == []
+
+
+def test_the_seed_lists_the_closures_and_not_the_lost_day() -> None:
+    closed = di.read_closed_days(SEED)
+    assert {dt.date(2025, 1, 9), dt.date(2025, 12, 24), dt.date(2025, 12, 26)} <= closed
+    assert dt.date(2026, 11, 5) not in closed
+
+
+@pytest.mark.parametrize(
+    "content", ["", "closed_date,reason,source\n", "day,reason\n2025-12-24,Christmas Eve\n"]
+)
+def test_a_seed_that_cannot_be_read_fails_loudly(tmp_path, content: str) -> None:
+    seed = tmp_path / "sec_closed_days.csv"
+    seed.write_text(content)
+    with pytest.raises(ValueError, match="closed_date"):
+        di.read_closed_days(seed)
+
+
+def test_a_missing_seed_fails_loudly(tmp_path) -> None:
+    with pytest.raises(FileNotFoundError):
+        di.read_closed_days(tmp_path / "sec_closed_days.csv")
+
+
+def test_the_alert_names_the_days_on_one_short_line() -> None:
+    one = di.describe_missing([dt.date(2026, 11, 5)])
+    assert one.startswith("1 business day has no daily index in bronze: 2026-11-05 (Thu).")
+    many = di.describe_missing([dt.date(2026, 10, d) for d in (19, 20, 21, 22, 23, 26, 27)])
+    assert many.startswith("7 business days have no daily index in bronze: 2026-10-19 (Mon),")
+    assert "2026-10-23 (Fri) and 2 more." in many
+    for text in (one, many):
+        assert "\n" not in text
+        assert len(text) <= 300  # the alert shows the error's first line, up to 300 characters
 
 
 # -- reading the file ---------------------------------------------------------------

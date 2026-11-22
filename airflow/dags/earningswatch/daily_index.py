@@ -17,6 +17,12 @@ HEADER = "CIK|Company Name|Form Type|Date Filed|File Name"
 # How long after a business day EDGAR must have published its index. Past this, a missing
 # file means EDGAR published none (an unscheduled closure); before it, it may still be coming.
 PUBLISH_GRACE = dt.timedelta(days=3)
+# The daily index history starts here (sec_daily_index's start_date).
+FIRST_DAY = dt.date(2025, 1, 1)
+# How far back each morning's check looks for a business day with no index in bronze. A gap is
+# reported every morning while it is inside this window; older ones only by
+# scripts/reconcile_bronze.py.
+CHECK_WINDOW = dt.timedelta(days=28)
 
 
 class DailyIndexFormatError(ValueError):
@@ -103,6 +109,11 @@ def bronze_key(day: dt.date) -> str:
     return f"bronze/source=daily_index/date={day:%Y-%m-%d}/{file_name(day)}"
 
 
+def receipt_key(day: dt.date) -> str:
+    """The day's manifest in bronze, written last when a file lands (bronze.manifest_key)."""
+    return bronze_key(day) + ".manifest.json"
+
+
 def silver_key(day: dt.date) -> str:
     return f"silver/daily_index/date={day:%Y-%m-%d}/part-0.parquet"
 
@@ -116,6 +127,52 @@ def missing_is_final(day: dt.date, now: dt.datetime) -> bool:
     """True once a business day is old enough that a missing index will never appear."""
     end_of_day = dt.datetime.combine(day + dt.timedelta(days=1), dt.time(), tzinfo=dt.UTC)
     return now >= end_of_day + PUBLISH_GRACE
+
+
+# -- has every recent business day landed? ---------------------------------------
+
+
+def read_closed_days(path: Path) -> set[dt.date]:
+    """The weekdays EDGAR accepted no filings, from the dbt seed sec_closed_days.csv.
+
+    The same list the timeliness models use. A missing, empty or malformed file raises, so the
+    check fails loudly instead of reporting every closure as a gap (or none at all).
+    """
+    import csv
+
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows or "closed_date" not in rows[0]:
+        raise ValueError(f"{path}: expected a closed_date column and at least one row")
+    return {dt.date.fromisoformat(row["closed_date"]) for row in rows}
+
+
+def days_to_check(now: dt.datetime, window: dt.timedelta = CHECK_WINDOW) -> list[dt.date]:
+    """The business days in the window whose index must exist by now (past PUBLISH_GRACE)."""
+    day = max(FIRST_DAY, (now - window).date())
+    days = []
+    while missing_is_final(day, now):
+        if is_business_day(day):
+            days.append(day)
+        day += dt.timedelta(days=1)
+    return days
+
+
+def missing_days(days: Iterable[dt.date], keys: set[str], closed: set[dt.date]) -> list[dt.date]:
+    """The days with no receipt among bronze's keys, other than days EDGAR was closed."""
+    return [day for day in days if receipt_key(day) not in keys and day not in closed]
+
+
+def describe_missing(missing: list[dt.date], shown: int = 5) -> str:
+    """One line for the alert (it shows the first 300 characters of the error)."""
+    listed = ", ".join(f"{day:%Y-%m-%d (%a)}" for day in missing[:shown])
+    if len(missing) > shown:
+        listed += f" and {len(missing) - shown} more"
+    count = f"{len(missing)} business day{'s have' if len(missing) > 1 else ' has'}"
+    return (
+        f"{count} no daily index in bronze: {listed}. If EDGAR published it, land it (runbook: "
+        "a day of the daily index is missing); if EDGAR was closed, add it to sec_closed_days.csv."
+    )
 
 
 # -- reading the file -----------------------------------------------------------

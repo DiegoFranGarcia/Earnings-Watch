@@ -4,6 +4,10 @@ Each run handles the calendar day before its logical date (see earningswatch.dai
 Weekends and federal holidays are skipped. A business day whose index is not published yet
 is retried for a few hours; one still missing days later is skipped, because EDGAR never
 published it (for example, an unscheduled closure).
+
+Each morning, check_landed_days also confirms that every business day of the last four weeks
+has its index in bronze, and fails (alerting) while one does not: a run that failed for good,
+as on 2026-11-06, leaves its day missing, because later runs each fetch only their own day.
 """
 
 from __future__ import annotations
@@ -13,7 +17,7 @@ from datetime import timedelta
 import pendulum
 from airflow.sdk import Asset, dag, task
 from airflow.sdk.definitions.deadline import AsyncCallback, DeadlineAlert, DeadlineReference
-from airflow.sdk.exceptions import AirflowSkipException
+from airflow.sdk.exceptions import AirflowFailException, AirflowSkipException
 
 from earningswatch.callbacks import notify_failure
 
@@ -119,7 +123,41 @@ def sec_daily_index():
         context["outlet_events"][SILVER_DAILY_INDEX].extra = {"day": day_iso}
         return rows
 
-    to_silver(land_index())
+    @task(retries=0, execution_timeout=timedelta(minutes=5), trigger_rule="all_done")
+    def check_landed_days() -> int:
+        """Fail, alerting, while a recent business day has no index in bronze.
+
+        Runs whatever happened to today's landing. Only reads S3 (one listing), never the SEC,
+        and has no outlet: a gap in an earlier day never holds back today's data.
+        """
+        import datetime as dt
+        import os
+        from pathlib import Path
+
+        import boto3
+
+        from earningswatch import daily_index as di
+        from earningswatch.config import load_settings
+
+        days = di.days_to_check(dt.datetime.now(dt.UTC))
+        if not days:
+            return 0
+        dbt_project = Path(os.environ.get("DBT_PROJECT_DIR", "/opt/airflow/dbt"))
+        closed = di.read_closed_days(dbt_project / "seeds" / "sec_closed_days.csv")
+        prefix = "bronze/source=daily_index/"
+        keys: set[str] = set()
+        paginator = boto3.client("s3").get_paginator("list_objects_v2")
+        start = f"{prefix}date={days[0]:%Y-%m-%d}"  # every key of that day sorts after this
+        bucket = load_settings().lake_bucket
+        for page in paginator.paginate(Bucket=bucket, Prefix=prefix, StartAfter=start):
+            keys.update(obj["Key"] for obj in page.get("Contents", []))
+        missing = di.missing_days(days, keys, closed)
+        if missing:
+            raise AirflowFailException(di.describe_missing(missing))
+        print(f"All {len(days)} business days from {days[0]} to {days[-1]} have their index.")
+        return len(days)
+
+    to_silver(land_index()) >> check_landed_days()
 
 
 sec_daily_index()

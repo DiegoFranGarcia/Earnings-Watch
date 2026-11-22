@@ -143,4 +143,6 @@ Real problems caught while building, each now guarded:
   relationship tests that judged the day before's tables, and published nothing; fixed by running
   tests with several parents after all of them ([the incident](incidents/2026-11-21.md)).
 - **Expired AWS logins on a laptop.** Scheduled runs fail when `aws login` lapses. Diagnosed from
-  a retrying task; Stage 7 replaces the login with an EC2 instance role.
+  a retrying task; Stage 7 replaces the login with an EC2 instance role. One such failure, before
+  alerts existed, lost a day of the daily index for two weeks; sec_daily_index now checks every
+  morning that recent days have landed ([the incident](incidents/2026-11-05.md)).
