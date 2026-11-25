@@ -340,21 +340,44 @@ def rows(rng: random.Random) -> dict[str, list[dict]]:
                         "timeliness_key": f"{group}|{form}|{year}",
                     }
                 )
+    # Every day state appears: the first three days before the record began, weekends' mornings
+    # with no run expected, one each held (with a drill), late, failed and missed, the rest met.
+    special = {9: "held", 14: "late", 16: "failed", 22: "missed"}
     for d in range(30):
         day = dt.date(2026, 10, 20) + dt.timedelta(days=d)
-        ran = day.weekday() < 6
+        expected = (day - dt.timedelta(days=1)).weekday() < 5
+        ran = expected  # a morning runs when the day before was a business day
+        state = (
+            "no_run_expected"
+            if not expected
+            else "not_recorded"
+            if d < 3
+            else special.get(d, "met")
+        )
+        exported = {
+            "met": ntz(day.year, day.month, day.day, 6, 8),
+            "held": ntz(day.year, day.month, day.day, 13, 57),
+            "late": ntz(day.year, day.month, day.day, 11, 40),
+        }.get(state)
         out["export_pipeline_health"].append(
             {
+                "run_expected": expected,
+                "first_exported_at": exported,
+                "exported_by_target": state == "met",
+                "has_failed_check": state == "held",
+                "has_failed_task": state in ("held", "failed"),
+                "has_drill": state == "held",
+                "day_state": state,
                 "date_day": day,
                 "latest_index_day": day - dt.timedelta(days=1) if ran else None,
                 "index_lag_days": 1 if ran else None,
                 "dbt_invocations": 2 if ran else 0,
                 "tests_run": 980 if ran else 0,
-                "tests_passed": 974 if ran else 0,
+                "tests_passed": (973 if state == "held" else 974) if ran else 0,
                 "tests_warned": 6 if ran else 0,
-                "tests_failed": 0,
+                "tests_failed": 1 if state == "held" else 0,
                 "models_failed": 0,
-                "test_pass_rate": 1.0 if ran else None,
+                "test_pass_rate": (1 - 1 / 980 if state == "held" else 1.0) if ran else None,
                 "volume_checks": 3 if ran else 0,
                 "volume_failures": 0,
                 "dollars": decimal.Decimal("0.041300") if ran else decimal.Decimal("0"),

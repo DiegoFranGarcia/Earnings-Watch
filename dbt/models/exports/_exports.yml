@@ -346,7 +346,9 @@ models:
         data_tests: [unique, not_null]
 
   - name: export_pipeline_health
-    description: "Grain: one row per calendar day, the last 30: mart_pipeline_health, whole."
+    description: >-
+      Grain: one row per complete UTC day, the last 30 ending yesterday: mart_pipeline_health,
+      whole.
     config:
       contract:
         enforced: true
@@ -378,6 +380,25 @@ models:
         data_type: integer
       - name: dollars
         data_type: decimal(18, 6)
+      - name: run_expected
+        data_type: boolean
+      - name: first_exported_at
+        data_type: timestamp_ntz
+      - name: exported_by_target
+        data_type: boolean
+      - name: has_failed_check
+        data_type: boolean
+      - name: has_failed_task
+        data_type: boolean
+      - name: has_drill
+        data_type: boolean
+      - name: day_state
+        data_type: varchar
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [no_run_expected, not_recorded, met, held, late, failed, missed]
 
 exposures:
   - name: public_site

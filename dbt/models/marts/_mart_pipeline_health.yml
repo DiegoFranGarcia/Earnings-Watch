@@ -3,11 +3,22 @@ version: 2
 models:
   - name: mart_pipeline_health
     description: >
-      Grain: one row per calendar day, for the last 30 days. Is the data correct (dbt test
-      results; warnings are findings, so only failures lower test_pass_rate), complete (volume
-      checks and their failures), fresh (the newest daily-index day the volume gate saw that day,
-      and how many days behind it was), and what did it cost (mart_pipeline_costs, which lags by
-      up to six hours). Days with no runs show zeros and null rates.
+      Grain: one row per complete UTC day, the last 30, ending yesterday (the model is built
+      inside the morning's dbt_build, before that morning's export). The pipeline's own runs
+      only: dbt run from a laptop and drills (run IDs starting manual__drill-) count in no
+      figure. Is the data correct (dbt test results; warnings are findings, so only failures
+      lower test_pass_rate), complete (volume checks and their failures), fresh (the newest
+      daily-index day the volume gate saw that day, and how many days behind it was), was it
+      exported on time (publish_site's export task by 09:00 UTC, from the task history), and
+      what did it cost (mart_pipeline_costs: query compute, excluding warehouse idle time;
+      lags by up to six hours). day_state sums the day up, the first that applies:
+      no_run_expected (the index that morning's run fetches was for a weekend or SEC holiday),
+      not_recorded (before the record began, on the first day the task history holds a run of
+      the export, publish_site; or not yet complete in it: it records at 09:30 UTC), met
+      (exported by 09:00 UTC, nothing failed), held (a volume check, test or model failed, so
+      the build stopped), late (exported after 09:00, nothing failed), failed (a task of the
+      data chain failed for another reason) and missed (due, nothing exported, nothing
+      failed).
     config:
       contract:
         enforced: true
@@ -39,3 +50,115 @@ models:
         data_type: decimal(18, 6)
       - name: index_lag_days
         data_type: integer
+      - name: run_expected
+        data_type: boolean
+        data_tests: [not_null]
+      - name: first_exported_at
+        description: When publish_site's export task first finished that day (UTC).
+        data_type: timestamp_ntz
+      - name: exported_by_target
+        data_type: boolean
+        data_tests: [not_null]
+      - name: has_failed_check
+        description: A volume check, dbt test or model failed in the pipeline's own runs.
+        data_type: boolean
+        data_tests: [not_null]
+      - name: has_failed_task
+        description: A task of the data chain ended failed (after its retries).
+        data_type: boolean
+        data_tests: [not_null]
+      - name: has_drill
+        description: A drill ran that day (a run ID starting manual__drill-); counted in no figure.
+        data_type: boolean
+        data_tests: [not_null]
+      - name: day_state
+        data_type: varchar
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [no_run_expected, not_recorded, met, held, late, failed, missed]
+
+unit_tests:
+  - name: each_day_gets_its_state_from_the_pipelines_own_runs
+    description: >
+      Built 2026-11-25 (UTC), so the days end on 11-24; the record begins with the export's
+      first run, on 11-12, and the history was last recorded at 09:30 on 11-24. 11-06: before
+      it began, so not recorded, although its build passed (as on 2026-11-18, before
+      publish_site existed). 11-10: a drill's export is no start of the record, so still not
+      recorded. 11-13: due and nothing ran, so missed. 11-16: the run fetches Sunday's index,
+      so none expected. 11-18: exported at 06:08 and a retry recovered, so met; a laptop's
+      cost is left out. 11-19: exported at 13:58, late. 11-20: landing failed, nothing
+      exported, failed. 11-21: a test failed at 06:06 and the export came at 13:57, so held;
+      the laptop's failures and the drill's failed check count in no figure, but the drill is
+      flagged. 11-24: nothing exported, but the history after 09:30 is not recorded yet, so
+      not recorded (not missed, and not failed for check_landed_days, which reports an earlier
+      day's gap). 11-25 is today, not complete, so not shown.
+    model: mart_pipeline_health
+    overrides:
+      vars:
+        pipeline_health_as_of: "2026-11-25"
+    given:
+      - input: ref('dim_date')
+        rows:
+          - {date_day: 2026-11-06}
+          - {date_day: 2026-11-10}
+          - {date_day: 2026-11-13}
+          - {date_day: 2026-11-16}
+          - {date_day: 2026-11-18}
+          - {date_day: 2026-11-19}
+          - {date_day: 2026-11-20}
+          - {date_day: 2026-11-21}
+          - {date_day: 2026-11-24}
+          - {date_day: 2026-11-25}
+      - input: ref('int_sec_calendar')
+        rows:
+          - {calendar_date: 2026-11-05, is_business_day: true}
+          - {calendar_date: 2026-11-09, is_business_day: true}
+          - {calendar_date: 2026-11-12, is_business_day: true}
+          - {calendar_date: 2026-11-15, is_business_day: false}
+          - {calendar_date: 2026-11-16, is_business_day: true}
+          - {calendar_date: 2026-11-17, is_business_day: true}
+          - {calendar_date: 2026-11-18, is_business_day: true}
+          - {calendar_date: 2026-11-19, is_business_day: true}
+          - {calendar_date: 2026-11-20, is_business_day: true}
+          - {calendar_date: 2026-11-23, is_business_day: true}
+      - input: source('audit', 'dbt_results')
+        rows:
+          - {invocation_id: a, run_label: "asset_triggered__2026-11-18T06:00:20+00:00_x", resource_type: test, status: pass, recorded_at: "2026-11-18 06:05:00"}
+          - {invocation_id: b, run_label: "asset_triggered__2026-11-21T06:00:20+00:00_y", resource_type: test, status: fail, recorded_at: "2026-11-21 06:06:19"}
+          - {invocation_id: c, run_label: manual, resource_type: test, status: fail, recorded_at: "2026-11-21 12:42:04"}
+          - {invocation_id: d, run_label: manual-20261121T125439Z, resource_type: model, status: error, recorded_at: "2026-11-21 12:54:40"}
+      - input: source('audit', 'dq_results')
+        rows:
+          - {check_name: daily_filings, subject: "2026-11-17", outcome: pass, run_id: "asset_triggered__2026-11-18T06:00:20+00:00_x", checked_at: "2026-11-18 06:00:40"}
+          - {check_name: daily_filings, subject: "2026-11-20", outcome: fail, run_id: manual__drill-volume-gate-2026-11-21, checked_at: "2026-11-21 20:30:48"}
+      - input: source('audit', 'airflow_task_attempts')
+        rows:
+          - {dag_id: dbt_build, run_id: "asset_triggered__2026-11-06T06:00:20+00:00_w", task_id: publish, map_index: -1, try_number: 1, state: success, started_at: "2026-11-06 06:04:00", ended_at: "2026-11-06 06:04:30", recorded_at: "2026-11-12 09:30:25"}
+          - {dag_id: publish_site, run_id: manual__drill-export-2026-11-10, task_id: export, map_index: -1, try_number: 1, state: success, started_at: "2026-11-10 06:05:00", ended_at: "2026-11-10 06:06:00", recorded_at: "2026-11-12 09:30:25"}
+          - {dag_id: publish_site, run_id: "asset_triggered__2026-11-12T06:04:00+00:00_v", task_id: export, map_index: -1, try_number: 1, state: success, started_at: "2026-11-12 06:04:10", ended_at: "2026-11-12 06:05:00", recorded_at: "2026-11-12 09:30:25"}
+          - {dag_id: sec_daily_index, run_id: "scheduled__2026-11-18T06:00:00+00:00", task_id: land_index, map_index: -1, try_number: 1, state: failed, started_at: "2026-11-18 06:00:01", ended_at: "2026-11-18 06:00:05", recorded_at: "2026-11-24 09:30:25"}
+          - {dag_id: sec_daily_index, run_id: "scheduled__2026-11-18T06:00:00+00:00", task_id: land_index, map_index: -1, try_number: 2, state: success, started_at: "2026-11-18 06:00:20", ended_at: "2026-11-18 06:00:25", recorded_at: "2026-11-24 09:30:25"}
+          - {dag_id: publish_site, run_id: "asset_triggered__2026-11-18T06:07:00+00:00_x", task_id: export, map_index: -1, try_number: 1, state: success, started_at: "2026-11-18 06:07:10", ended_at: "2026-11-18 06:08:07", recorded_at: "2026-11-24 09:30:25"}
+          - {dag_id: publish_site, run_id: "asset_triggered__2026-11-19T13:57:00+00:00_x", task_id: export, map_index: -1, try_number: 1, state: success, started_at: "2026-11-19 13:57:10", ended_at: "2026-11-19 13:58:00", recorded_at: "2026-11-24 09:30:25"}
+          - {dag_id: sec_daily_index, run_id: "scheduled__2026-11-20T06:00:00+00:00", task_id: land_index, map_index: -1, try_number: 9, state: failed, started_at: "2026-11-20 10:00:00", ended_at: "2026-11-20 10:10:22", recorded_at: "2026-11-24 09:30:25"}
+          - {dag_id: dbt_build, run_id: "asset_triggered__2026-11-21T06:00:20+00:00_y", task_id: build.export_screener.test, map_index: -1, try_number: 2, state: failed, started_at: "2026-11-21 06:08:00", ended_at: "2026-11-21 06:08:32", recorded_at: "2026-11-24 09:30:25"}
+          - {dag_id: publish_site, run_id: "asset_triggered__2026-11-21T13:57:27+00:00_z", task_id: export, map_index: -1, try_number: 1, state: success, started_at: "2026-11-21 13:56:30", ended_at: "2026-11-21 13:57:20", recorded_at: "2026-11-24 09:30:25"}
+          - {dag_id: dbt_build, run_id: manual__drill-volume-gate-2026-11-21, task_id: volume_gate, map_index: -1, try_number: 1, state: failed, started_at: "2026-11-21 20:30:34", ended_at: "2026-11-21 20:30:49", recorded_at: "2026-11-24 09:30:25"}
+          - {dag_id: sec_daily_index, run_id: "scheduled__2026-11-24T06:00:00+00:00", task_id: check_landed_days, map_index: -1, try_number: 1, state: failed, started_at: "2026-11-24 06:00:09", ended_at: "2026-11-24 06:00:10", recorded_at: "2026-11-24 09:30:25"}
+      - input: ref('mart_pipeline_costs')
+        rows:
+          - {run_id: "asset_triggered__2026-11-18T06:00:20+00:00_x", started_at: "2026-11-18 06:01:00", dollars: 0.10}
+          - {run_id: manual, started_at: "2026-11-18 15:00:00", dollars: 5.00}
+    expect:
+      rows:
+        - {date_day: 2026-11-06, day_state: not_recorded, has_drill: false, exported_by_target: false, tests_failed: 0, volume_checks: 0, dollars: 0}
+        - {date_day: 2026-11-10, day_state: not_recorded, has_drill: false, exported_by_target: false, tests_failed: 0, volume_checks: 0, dollars: 0}
+        - {date_day: 2026-11-13, day_state: missed, has_drill: false, exported_by_target: false, tests_failed: 0, volume_checks: 0, dollars: 0}
+        - {date_day: 2026-11-16, day_state: no_run_expected, has_drill: false, exported_by_target: false, tests_failed: 0, volume_checks: 0, dollars: 0}
+        - {date_day: 2026-11-18, day_state: met, has_drill: false, exported_by_target: true, tests_failed: 0, volume_checks: 1, dollars: 0.10}
+        - {date_day: 2026-11-19, day_state: late, has_drill: false, exported_by_target: false, tests_failed: 0, volume_checks: 0, dollars: 0}
+        - {date_day: 2026-11-20, day_state: failed, has_drill: false, exported_by_target: false, tests_failed: 0, volume_checks: 0, dollars: 0}
+        - {date_day: 2026-11-21, day_state: held, has_drill: true, exported_by_target: false, tests_failed: 1, volume_checks: 0, dollars: 0}
+        - {date_day: 2026-11-24, day_state: not_recorded, has_drill: false, exported_by_target: false, tests_failed: 0, volume_checks: 0, dollars: 0}

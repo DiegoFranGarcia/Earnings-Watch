@@ -79,7 +79,7 @@ vars:
   # implausible: shown on the site with a warning, and listed by a warning test (ADR 8).
   implausible_multiple_of_assets: 2
   # Prices for mart_pipeline_costs (check your contract and region before relying on them).
-  snowflake_dollars_per_credit: 2.00  # Standard edition, on demand
+  snowflake_dollars_per_credit: 3.00  # the account's rate sheet (RATE_SHEET_DAILY), 2026-11-22
   emr_dollars_per_vcpu_hour: 0.052624  # EMR Serverless, us-east-1
   emr_dollars_per_gb_hour: 0.0057785
   emr_dollars_per_storage_gb_hour: 0.000111

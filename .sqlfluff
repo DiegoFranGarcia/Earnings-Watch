@@ -6,3 +6,5 @@ max_line_length = 100
 [sqlfluff:templater:jinja]
 # Stand-ins for dbt's ref(), source() and config(), so models lint without running dbt.
 apply_dbt_builtins = True
+# The project's own macros (pipeline_run() and the rest), as dbt loads them.
+load_macros_from_path = dbt/macros
