@@ -15,7 +15,11 @@ sources:
           (the 60 seconds before auto-suspend), so attributed cost understates the bill.
 
   - name: audit
-    description: Tables Airflow writes in AUDIT, as LOADER (scripts/create_audit_tables.py).
+    description: >
+      Tables Airflow writes in AUDIT, as LOADER (scripts/create_audit_tables.py). Read from
+      DBT_SOURCE_DATABASE when it is set, like RAW: slim CI builds in EARNINGSWATCH_CI, which has
+      no audit tables, and reads production's.
+    database: "{{ env_var('DBT_SOURCE_DATABASE', target.database) }}"
     schema: AUDIT
     tables:
       - name: emr_job_runs
