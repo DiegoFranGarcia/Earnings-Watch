@@ -145,7 +145,7 @@ test("a table that cannot be downloaded says so, and the next run tries again", 
   await expect(page.getByTestId("error")).toContainText("could not be downloaded");
   refuse = false;
   await run(page, "select count(*) as days from export_pipeline_health");
-  await expect(page.getByTestId("result")).toContainText("30");
+  await expect(page.getByTestId("result")).toContainText("79");
 });
 
 test("Stop ends a runaway query at once, and the next run starts DuckDB again", async ({ page }) => {

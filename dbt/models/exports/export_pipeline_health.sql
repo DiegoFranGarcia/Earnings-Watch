@@ -1,6 +1,6 @@
--- The pipeline-health page: the whole mart, one row per complete UTC day, the last 30 ending
--- yesterday (tests, volume checks, freshness, the export's time, the day's state and cost). Part
--- of the site's export contract (ADR 17).
+-- The Pipeline page: the whole mart, one row per complete UTC day from pipeline_started_on to
+-- yesterday, the pipeline's whole record (tests, volume checks, freshness, the export's time, the
+-- day's state and cost). Part of the site's export contract (ADR 17).
 select
     date_day,
     latest_index_day,

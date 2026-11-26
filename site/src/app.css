@@ -15,6 +15,10 @@
   --down: #b3261e;
   --band: #e3eedb;
   --shade: rgba(20, 30, 20, 0.35);
+  /* The Pipeline page's day states: teal for exported, ochre for held back, ink for failures.
+     Not green or red, which mean up and down. Each state also differs in shape or texture. */
+  --day-held: #a8700f;
+  --day-none: #dce6d4;
 }
 :root[data-theme="dark"] {
   --bg: #0b1015;
@@ -29,6 +33,8 @@
   --down: #ff6b5e;
   --band: transparent;
   --shade: rgba(0, 0, 0, 0.55);
+  --day-held: #e0a93b;
+  --day-none: #26333f;
 }
 
 * { box-sizing: border-box; }

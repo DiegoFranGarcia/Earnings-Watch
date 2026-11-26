@@ -78,6 +78,10 @@ vars:
   # A year's net income or operating cash flow above this multiple of average total assets is
   # implausible: shown on the site with a warning, and listed by a warning test (ADR 8).
   implausible_multiple_of_assets: 2
+  # The pipeline's record (mart_pipeline_health) begins on the first morning the whole chain ran
+  # and was recorded: landed, loaded, built, exported and deployed. publish_site was added after
+  # 2026-11-18's run, so 2026-11-19 is that morning. The record runs from here to yesterday.
+  pipeline_started_on: "2026-11-19"
   # Prices for mart_pipeline_costs (check your contract and region before relying on them).
   snowflake_dollars_per_credit: 3.00  # the account's rate sheet (RATE_SHEET_DAILY), 2026-11-22
   emr_dollars_per_vcpu_hour: 0.052624  # EMR Serverless, us-east-1

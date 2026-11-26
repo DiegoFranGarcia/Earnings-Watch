@@ -479,7 +479,7 @@
   },
   {
    "name": "export_pipeline_health",
-   "description": "Grain: one row per complete UTC day, the last 30 ending yesterday: mart_pipeline_health, whole.",
+   "description": "Grain: one row per complete UTC day from pipeline_started_on to yesterday, the pipeline's whole record: mart_pipeline_health, whole.",
    "columns": [
     {
      "name": "date_day",

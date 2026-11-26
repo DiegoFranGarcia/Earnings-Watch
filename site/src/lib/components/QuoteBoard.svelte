@@ -1,9 +1,10 @@
 <script>
   import { cents, compact } from "#lib/format.js";
   import { link } from "#lib/pages.js";
+  import { longDate } from "#lib/pipeline.js";
 
-  /** @type {{ facts: any, dollars30d: number }} */
-  let { facts, dollars30d } = $props();
+  /** @type {{ facts: any, perRun: number | null, since: string | null }} */
+  let { facts, perRun, since } = $props();
   const repo = "https://github.com/DiegoFranGarcia/Earnings-Watch/blob/main/";
 </script>
 
@@ -24,10 +25,10 @@
   </div>
   <div class="quote">
     <span class="what">
-      Snowflake and Spark query compute, last 30 days (excluding warehouse idle time)
-      <a href={link("/pipeline")}>by day</a>
+      Snowflake and Spark compute, average per daily run{since ? ` since ${longDate(since)}` : ""}
+      <a href="{link('/pipeline')}#what-it-covers">what it covers</a>
     </span>
-    <span class="v">{cents(dollars30d)}</span>
+    <span class="v">{cents(perRun)}</span>
   </div>
 </section>
 

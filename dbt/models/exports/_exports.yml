@@ -347,8 +347,8 @@ models:
 
   - name: export_pipeline_health
     description: >-
-      Grain: one row per complete UTC day, the last 30 ending yesterday: mart_pipeline_health,
-      whole.
+      Grain: one row per complete UTC day from pipeline_started_on to yesterday, the pipeline's
+      whole record: mart_pipeline_health, whole.
     config:
       contract:
         enforced: true

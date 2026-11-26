@@ -1,5 +1,6 @@
--- One row per complete UTC day, the last 30, ending yesterday (this model is built inside the
--- morning's dbt_build, before that morning's export runs): was a run expected, did the export
+-- One row per complete UTC day of the pipeline's life, from pipeline_started_on to yesterday (this
+-- model is built inside the morning's dbt_build, before that morning's export runs, so today is
+-- never complete): its whole record, not a window. Was a run expected, did the export
 -- finish by 09:00 UTC, is the data correct, complete and fresh, and what did it cost? Correct:
 -- dbt test results (warnings are documented findings about filer data, so only failures lower
 -- the pass rate). Complete: the volume gate's checks. Fresh: the newest day of the daily index
@@ -23,7 +24,9 @@ days as (
     select dim_date.date_day
     from {{ ref('dim_date') }} as dim_date
     cross join as_of
-    where dim_date.date_day between dateadd(day, -30, as_of.today) and dateadd(day, -1, as_of.today)
+    where
+        dim_date.date_day
+        between cast('{{ var("pipeline_started_on") }}' as date) and dateadd(day, -1, as_of.today)
 ),
 
 calendar as (

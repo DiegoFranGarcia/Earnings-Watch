@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { asyncBufferFromFile } from "hyparquet";
 import { readParquet } from "#lib/parquet.js";
+import { summarize as summarizeRecord, toDays } from "#lib/pipeline.js";
 import { prepare, sortRows, summarize, toRow } from "#lib/screener.js";
 
 const DIR = process.env.EW_DATA_DIR ?? "../_site";
@@ -81,6 +82,7 @@ export async function overview() {
     table("export_pipeline_health"),
   ]);
   const summary = summarize(all);
+  const record = summarizeRecord(toDays(health));
 
   // The flagged companies up to date with their filings, largest gap in dollars first, each with
   // its last eight quarters of net income in the same view.
@@ -116,8 +118,10 @@ export async function overview() {
     rows,
     industries: [...new Set(rows.map((r) => r.industry))].sort(),
     pipeline: {
-      // Snowflake and EMR only (mart_pipeline_costs), over the 30 days the export covers.
-      dollars_30d: health.reduce((sum, d) => sum + (d.dollars ?? 0), 0),
+      // Snowflake query compute and EMR (mart_pipeline_costs), averaged over every morning a run
+      // was due since the pipeline's record began: the same figure as the Pipeline page.
+      per_run: record.perRun,
+      since: record.first,
     },
   };
 }
