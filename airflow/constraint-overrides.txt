@@ -22,9 +22,10 @@ yarl==1.25.1
 # fixes both. Published 2026-11-03 at 23:56 UTC.
 dnspython==2.9.2
 
-# virtualenv: PYSEC-2026-4372 to PYSEC-2026-4387 (14 advisories, published 2026-11-17); 21.14.10
-# fixes the last of them, and 21.14.11 is its bug-fix release. Airflow needs virtualenv only to run
-# tasks in separate Python environments, which no DAG does.
-virtualenv==21.14.11
-# python-discovery: virtualenv 21.14.11 needs 1.6.1 or later; Airflow's constraints pin 1.6.0.
+# virtualenv: PYSEC-2026-4372 to PYSEC-2026-4387 (14 advisories, published 2026-11-17), fixed by
+# 21.14.10; and PYSEC-2026-4402 (CVE-2026-115586, an unescaped --prompt in bash's activate script),
+# fixed by 21.14.13 (published 2026-10-22). Airflow needs virtualenv only to run tasks in separate
+# Python environments, which no DAG does.
+virtualenv==21.14.13
+# python-discovery: virtualenv 21.14.13 needs 1.6.1 or later; Airflow's constraints pin 1.6.0.
 python-discovery==1.6.2
