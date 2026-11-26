@@ -24,7 +24,7 @@
   </div>
   <div class="quote">
     <span class="what">
-      Snowflake and Spark compute, last 30 days
+      Snowflake and Spark query compute, last 30 days (excluding warehouse idle time)
       <a href={link("/pipeline")}>by day</a>
     </span>
     <span class="v">{cents(dollars30d)}</span>

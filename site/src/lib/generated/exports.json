@@ -479,7 +479,7 @@
   },
   {
    "name": "export_pipeline_health",
-   "description": "Grain: one row per calendar day, the last 30: mart_pipeline_health, whole.",
+   "description": "Grain: one row per complete UTC day, the last 30 ending yesterday: mart_pipeline_health, whole.",
    "columns": [
     {
      "name": "date_day",
@@ -544,6 +544,41 @@
     {
      "name": "dollars",
      "type": "decimal(18, 6)",
+     "description": null
+    },
+    {
+     "name": "run_expected",
+     "type": "boolean",
+     "description": null
+    },
+    {
+     "name": "first_exported_at",
+     "type": "timestamp_ntz",
+     "description": null
+    },
+    {
+     "name": "exported_by_target",
+     "type": "boolean",
+     "description": null
+    },
+    {
+     "name": "has_failed_check",
+     "type": "boolean",
+     "description": null
+    },
+    {
+     "name": "has_failed_task",
+     "type": "boolean",
+     "description": null
+    },
+    {
+     "name": "has_drill",
+     "type": "boolean",
+     "description": null
+    },
+    {
+     "name": "day_state",
+     "type": "varchar",
      "description": null
     }
    ]

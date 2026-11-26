@@ -44,3 +44,9 @@ DESC USER TERRAFORM;
 -- Stage 6: let TRANSFORMER read Snowflake's usage views (per-query credits for
 -- mart_pipeline_costs). USAGE_VIEWER is read-only and covers usage history only.
 GRANT DATABASE ROLE SNOWFLAKE.USAGE_VIEWER TO ROLE TRANSFORMER;
+
+-- 2026-11-26: CI too. Slim CI builds every model a pull request changes, and mart_pipeline_costs
+-- reads QUERY_ATTRIBUTION_HISTORY; without this, CI cannot build or unit-test it. Still usage
+-- history only: no query text, logins, users or grants (those are other database roles).
+-- CI's read access to the AUDIT tables is Terraform's (infra/modules/snowflake).
+GRANT DATABASE ROLE SNOWFLAKE.USAGE_VIEWER TO ROLE CI;

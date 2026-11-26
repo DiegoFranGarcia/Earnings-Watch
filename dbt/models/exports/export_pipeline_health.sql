@@ -1,5 +1,6 @@
--- The pipeline-health page: the whole mart, one row per day for the last 30 days (tests,
--- volume checks, freshness and cost). Part of the site's export contract (ADR 17).
+-- The pipeline-health page: the whole mart, one row per complete UTC day, the last 30 ending
+-- yesterday (tests, volume checks, freshness, the export's time, the day's state and cost). Part
+-- of the site's export contract (ADR 17).
 select
     date_day,
     latest_index_day,
@@ -13,5 +14,12 @@ select
     test_pass_rate,
     volume_checks,
     volume_failures,
-    dollars
+    dollars,
+    run_expected,
+    first_exported_at,
+    exported_by_target,
+    has_failed_check,
+    has_failed_task,
+    has_drill,
+    day_state
 from {{ ref('mart_pipeline_health') }}
