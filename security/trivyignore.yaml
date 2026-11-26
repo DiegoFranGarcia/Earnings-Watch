@@ -210,3 +210,15 @@ vulnerabilities:
       - pkg:deb/debian/libkrb5support0
     statement: "Postgres image; no KDC or kadmind, no Kerberos login, no published port."
     expired_at: 2026-12-15
+
+  # zstd in the Postgres image: CVE-2026-124851 (published 2026-11-24) leaks a decompression buffer
+  # into the output of crafted data, fixed in Debian by 1.5.7+dfsg-1+deb13u1. Nothing gives Postgres
+  # zstd data to decompress: the backup's pg_dump writes plain SQL (gzip runs on the host) and the
+  # restore reads it with psql; WAL compression and server-side base-backup compression are off,
+  # and Postgres 16 never compresses TOAST with zstd. No Postgres port is published.
+  - id: CVE-2026-124851
+    purls:
+      - pkg:deb/debian/libzstd1
+      - pkg:deb/debian/zstd
+    statement: "Postgres image; nothing decompresses zstd data (plain-SQL backups, no WAL compression)."
+    expired_at: 2026-12-15
