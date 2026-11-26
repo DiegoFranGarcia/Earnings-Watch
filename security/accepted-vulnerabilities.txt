@@ -35,3 +35,4 @@ CVE-2026-126192 | soupsieve | 2027-02-15 | CSS selectors for HTML parsing; nothi
 CVE-2026-126193 | soupsieve | 2027-02-15 | CSS selectors for HTML parsing; nothing in the pipeline parses HTML.
 PYSEC-2026-4305 | uv | 2027-02-15 | Only for running tasks in separate Python environments; no DAG does.
 PYSEC-2026-4321 | uv | 2027-02-15 | Only for running tasks in separate Python environments; no DAG does.
+PYSEC-2026-4396 | apache-airflow-providers-smtp | 2026-12-15 | Nothing sends email (no SMTP settings, EmailOperator or email callbacks); fix 3.2.2 is adoptable from 2026-12-08.

@@ -90,3 +90,135 @@ vulnerabilities:
       - pkg:deb/debian/zlib1g
     statement: "Postgres image; fix arrives with the next postgres:16.15 build via Dependabot."
     expired_at: 2026-12-15
+
+  # Kerberos (krb5) in the Postgres image: 14 flaws, mostly in Kerberos's own servers (the KDC and
+  # kadmind), fixed in Debian by DSA-6650-1 (1.21.3-5+deb13u2). Checked 2026-11-23 on the pinned
+  # image: only the client libraries are installed (krb5kdc and kadmind are absent); postgres links
+  # them but allows no Kerberos login (pg_hba: trust inside the container, scram-sha-256 for the
+  # network, no gss line); compose publishes no Postgres port. Neither postgres:16.15 (2026-11-07)
+  # nor postgres:16.16 (2026-11-19) has the fix yet; Dependabot proposes the build that does once
+  # it is 14 days old.
+  - id: CVE-2026-107364
+    purls:
+      - pkg:deb/debian/libgssapi-krb5-2
+      - pkg:deb/debian/libk5crypto3
+      - pkg:deb/debian/libkrb5-3
+      - pkg:deb/debian/libkrb5support0
+    statement: "Postgres image; no KDC or kadmind, no Kerberos login, no published port."
+    expired_at: 2026-12-15
+  - id: CVE-2026-112315
+    purls:
+      - pkg:deb/debian/libgssapi-krb5-2
+      - pkg:deb/debian/libk5crypto3
+      - pkg:deb/debian/libkrb5-3
+      - pkg:deb/debian/libkrb5support0
+    statement: "Postgres image; no KDC or kadmind, no Kerberos login, no published port."
+    expired_at: 2026-12-15
+  - id: CVE-2026-112316
+    purls:
+      - pkg:deb/debian/libgssapi-krb5-2
+      - pkg:deb/debian/libk5crypto3
+      - pkg:deb/debian/libkrb5-3
+      - pkg:deb/debian/libkrb5support0
+    statement: "Postgres image; no KDC or kadmind, no Kerberos login, no published port."
+    expired_at: 2026-12-15
+  - id: CVE-2026-112317
+    purls:
+      - pkg:deb/debian/libgssapi-krb5-2
+      - pkg:deb/debian/libk5crypto3
+      - pkg:deb/debian/libkrb5-3
+      - pkg:deb/debian/libkrb5support0
+    statement: "Postgres image; no KDC or kadmind, no Kerberos login, no published port."
+    expired_at: 2026-12-15
+  - id: CVE-2026-112318
+    purls:
+      - pkg:deb/debian/libgssapi-krb5-2
+      - pkg:deb/debian/libk5crypto3
+      - pkg:deb/debian/libkrb5-3
+      - pkg:deb/debian/libkrb5support0
+    statement: "Postgres image; no KDC or kadmind, no Kerberos login, no published port."
+    expired_at: 2026-12-15
+  - id: CVE-2026-112319
+    purls:
+      - pkg:deb/debian/libgssapi-krb5-2
+      - pkg:deb/debian/libk5crypto3
+      - pkg:deb/debian/libkrb5-3
+      - pkg:deb/debian/libkrb5support0
+    statement: "Postgres image; no KDC or kadmind, no Kerberos login, no published port."
+    expired_at: 2026-12-15
+  - id: CVE-2026-112320
+    purls:
+      - pkg:deb/debian/libgssapi-krb5-2
+      - pkg:deb/debian/libk5crypto3
+      - pkg:deb/debian/libkrb5-3
+      - pkg:deb/debian/libkrb5support0
+    statement: "Postgres image; no KDC or kadmind, no Kerberos login, no published port."
+    expired_at: 2026-12-15
+  - id: CVE-2026-112321
+    purls:
+      - pkg:deb/debian/libgssapi-krb5-2
+      - pkg:deb/debian/libk5crypto3
+      - pkg:deb/debian/libkrb5-3
+      - pkg:deb/debian/libkrb5support0
+    statement: "Postgres image; no KDC or kadmind, no Kerberos login, no published port."
+    expired_at: 2026-12-15
+  - id: CVE-2026-112322
+    purls:
+      - pkg:deb/debian/libgssapi-krb5-2
+      - pkg:deb/debian/libk5crypto3
+      - pkg:deb/debian/libkrb5-3
+      - pkg:deb/debian/libkrb5support0
+    statement: "Postgres image; no KDC or kadmind, no Kerberos login, no published port."
+    expired_at: 2026-12-15
+  - id: CVE-2026-112323
+    purls:
+      - pkg:deb/debian/libgssapi-krb5-2
+      - pkg:deb/debian/libk5crypto3
+      - pkg:deb/debian/libkrb5-3
+      - pkg:deb/debian/libkrb5support0
+    statement: "Postgres image; no KDC or kadmind, no Kerberos login, no published port."
+    expired_at: 2026-12-15
+  - id: CVE-2026-118380
+    purls:
+      - pkg:deb/debian/libgssapi-krb5-2
+      - pkg:deb/debian/libk5crypto3
+      - pkg:deb/debian/libkrb5-3
+      - pkg:deb/debian/libkrb5support0
+    statement: "Postgres image; no KDC or kadmind, no Kerberos login, no published port."
+    expired_at: 2026-12-15
+  - id: CVE-2026-119079
+    purls:
+      - pkg:deb/debian/libgssapi-krb5-2
+      - pkg:deb/debian/libk5crypto3
+      - pkg:deb/debian/libkrb5-3
+      - pkg:deb/debian/libkrb5support0
+    statement: "Postgres image; no KDC or kadmind, no Kerberos login, no published port."
+    expired_at: 2026-12-15
+  - id: CVE-2026-71199
+    purls:
+      - pkg:deb/debian/libgssapi-krb5-2
+      - pkg:deb/debian/libk5crypto3
+      - pkg:deb/debian/libkrb5-3
+      - pkg:deb/debian/libkrb5support0
+    statement: "Postgres image; no KDC or kadmind, no Kerberos login, no published port."
+    expired_at: 2026-12-15
+  - id: CVE-2026-71200
+    purls:
+      - pkg:deb/debian/libgssapi-krb5-2
+      - pkg:deb/debian/libk5crypto3
+      - pkg:deb/debian/libkrb5-3
+      - pkg:deb/debian/libkrb5support0
+    statement: "Postgres image; no KDC or kadmind, no Kerberos login, no published port."
+    expired_at: 2026-12-15
+
+  # zstd in the Postgres image: CVE-2026-124851 (published 2026-11-24) leaks a decompression buffer
+  # into the output of crafted data, fixed in Debian by 1.5.7+dfsg-1+deb13u1. Nothing gives Postgres
+  # zstd data to decompress: the backup's pg_dump writes plain SQL (gzip runs on the host) and the
+  # restore reads it with psql; WAL compression and server-side base-backup compression are off,
+  # and Postgres 16 never compresses TOAST with zstd. No Postgres port is published.
+  - id: CVE-2026-124851
+    purls:
+      - pkg:deb/debian/libzstd1
+      - pkg:deb/debian/zstd
+    statement: "Postgres image; nothing decompresses zstd data (plain-SQL backups, no WAL compression)."
+    expired_at: 2026-12-15
