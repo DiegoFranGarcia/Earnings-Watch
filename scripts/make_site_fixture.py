@@ -340,25 +340,38 @@ def rows(rng: random.Random) -> dict[str, list[dict]]:
                         "timeliness_key": f"{group}|{form}|{year}",
                     }
                 )
-    # Every day state appears: the first three days before the record began, weekends' mornings
-    # with no run expected, one each held (with a drill), late, failed and missed, the rest met.
-    special = {9: "held", 14: "late", 16: "failed", 22: "missed"}
-    for d in range(30):
-        day = dt.date(2026, 10, 20) + dt.timedelta(days=d)
-        expected = (day - dt.timedelta(days=1)).weekday() < 5
+    # The pipeline's whole record, as the export carries it: from the first day of its record
+    # (2026-09-01 here) to the day before the export (2026-11-18). Mornings after a weekend or a
+    # federal holiday have no run due; every other state appears at least once, the rest are on
+    # time; the day after a quarter's load costs more.
+    holidays = {dt.date(2026, 9, 7), dt.date(2026, 10, 12), dt.date(2026, 11, 11)}
+    special = {
+        dt.date(2026, 9, 22): "held",
+        dt.date(2026, 9, 30): "missed",
+        dt.date(2026, 10, 6): "late",
+        dt.date(2026, 10, 15): "failed",
+        dt.date(2026, 10, 28): "held",
+        dt.date(2026, 11, 3): "late",
+    }
+    first, last = dt.date(2026, 9, 1), dt.date(2026, 11, 18)
+    for d in range((last - first).days + 1):
+        day = first + dt.timedelta(days=d)
+        before = day - dt.timedelta(days=1)
+        expected = before.weekday() < 5 and before not in holidays
         ran = expected  # a morning runs when the day before was a business day
-        state = (
-            "no_run_expected"
-            if not expected
-            else "not_recorded"
-            if d < 3
-            else special.get(d, "met")
-        )
+        state = "no_run_expected" if not expected else special.get(day, "met")
         exported = {
             "met": ntz(day.year, day.month, day.day, 6, 8),
             "held": ntz(day.year, day.month, day.day, 13, 57),
             "late": ntz(day.year, day.month, day.day, 11, 40),
         }.get(state)
+        dollars = (
+            decimal.Decimal("0")
+            if not ran
+            else decimal.Decimal("0.652100")
+            if day == dt.date(2026, 10, 29)
+            else decimal.Decimal("0.041300")
+        )
         out["export_pipeline_health"].append(
             {
                 "run_expected": expected,
@@ -380,7 +393,7 @@ def rows(rng: random.Random) -> dict[str, list[dict]]:
                 "test_pass_rate": (1 - 1 / 980 if state == "held" else 1.0) if ran else None,
                 "volume_checks": 3 if ran else 0,
                 "volume_failures": 0,
-                "dollars": decimal.Decimal("0.041300") if ran else decimal.Decimal("0"),
+                "dollars": dollars,
             }
         )
     return out

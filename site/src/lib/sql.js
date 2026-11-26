@@ -82,9 +82,9 @@ limit 20`,
   },
   {
     id: "pipeline",
-    title: "The pipeline's last 30 days",
-    about: "Tests and volume checks each day, and what Snowflake and EMR cost.",
-    sql: `select date_day, tests_passed, tests_warned, tests_failed, volume_failures, round(dollars, 2) as dollars
+    title: "The pipeline's record, day by day",
+    about: "Each morning's state since the record began, when it exported, and what Snowflake and EMR cost.",
+    sql: `select date_day, day_state, first_exported_at, round(dollars, 4) as dollars
 from export_pipeline_health
 order by date_day desc`,
   },

@@ -3,8 +3,10 @@ version: 2
 models:
   - name: mart_pipeline_health
     description: >
-      Grain: one row per complete UTC day, the last 30, ending yesterday (the model is built
-      inside the morning's dbt_build, before that morning's export). The pipeline's own runs
+      Grain: one row per complete UTC day of the pipeline's life, from pipeline_started_on
+      (2026-11-19, the first morning the whole chain ran and was recorded) to yesterday: the
+      model is built inside the morning's dbt_build, before that morning's export, so today is
+      never complete. Its whole record, not a window. The pipeline's own runs
       only: dbt run from a laptop and drills (run IDs starting manual__drill-) count in no
       figure. Is the data correct (dbt test results; warnings are findings, so only failures
       lower test_pass_rate), complete (volume checks and their failures), fresh (the newest
@@ -82,7 +84,8 @@ models:
 unit_tests:
   - name: each_day_gets_its_state_from_the_pipelines_own_runs
     description: >
-      Built 2026-11-25 (UTC), so the days end on 11-24; the record begins with the export's
+      Built 2026-11-25 (UTC), so the days end on 11-24 (they start on pipeline_started_on, set
+      to 11-01 here so every case below is in range); the record begins with the export's
       first run, on 11-12, and the history was last recorded at 09:30 on 11-24. 11-06: before
       it began, so not recorded, although its build passed (as on 2026-11-18, before
       publish_site existed). 11-10: a drill's export is no start of the record, so still not
@@ -98,6 +101,7 @@ unit_tests:
     overrides:
       vars:
         pipeline_health_as_of: "2026-11-25"
+        pipeline_started_on: "2026-11-01"
     given:
       - input: ref('dim_date')
         rows:

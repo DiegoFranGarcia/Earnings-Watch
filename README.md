@@ -135,7 +135,8 @@ Every check that fired was investigated against the data before anything was cha
   implausible; drilled by deleting 60% of a quarter: the marts stayed byte-identical
   ([ADR 10](docs/adr/0010-a-circuit-breaker-before-the-marts-publish.md), [chaos drills](docs/chaos.md)).
 - **Every dbt result, finding and cost is kept in `AUDIT`.** One model, `mart_pipeline_health`,
-  answers whether the data is correct, complete and fresh, and what it cost, for the last 30 days.
+  answers whether the data is correct, complete and fresh, and what it cost, for every day since
+  the pipeline's record began (2026-11-19).
   A full dbt build costs about $0.12–0.18; warehouse idle time nearly doubles small runs' bills.
 - **Conflicting values for the same reported number** have grown since 2024 Q3 (up to 98 rows
   a quarter); they are kept and flagged for the models to resolve, never silently dropped.

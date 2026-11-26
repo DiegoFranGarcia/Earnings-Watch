@@ -16,7 +16,7 @@
 
 <main>
   <Hero summary={data.overview.summary} {view} onview={(v) => (view = v)} />
-  <QuoteBoard facts={data.facts} dollars30d={data.overview.pipeline.dollars_30d} />
+  <QuoteBoard facts={data.facts} perRun={data.overview.pipeline.per_run} since={data.overview.pipeline.since} />
   <FlaggedTable rows={data.overview.rows} industries={data.overview.industries} {view} />
   <PipelineStrip exportedAt={data.status.exported_at} />
   <footer class="muted">
