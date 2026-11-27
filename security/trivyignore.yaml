@@ -222,3 +222,17 @@ vulnerabilities:
       - pkg:deb/debian/zstd
     statement: "Postgres image; nothing decompresses zstd data (plain-SQL backups, no WAL compression)."
     expired_at: 2026-12-15
+
+  # Linux-PAM in the Airflow image: CVE-2025-6020, pam_namespace lets a local user reach root
+  # through symlink races. Debian's first fix (deb12u2) was incomplete; DLA-4941-1 (deb12u3) is too
+  # new for the two-week rule until about 2026-12-11. Checked 2026-11-27 on the pinned base image
+  # (the Dockerfile does not touch PAM): pam_namespace is in no PAM stack and namespace.conf has no
+  # rules, so the module is never loaded; the container runs as airflow, and has no sshd.
+  - id: CVE-2025-6020
+    purls:
+      - pkg:deb/debian/libpam-modules
+      - pkg:deb/debian/libpam-modules-bin
+      - pkg:deb/debian/libpam-runtime
+      - pkg:deb/debian/libpam0g
+    statement: "Airflow image; pam_namespace is in no PAM stack, so the module is never loaded."
+    expired_at: 2026-12-15
