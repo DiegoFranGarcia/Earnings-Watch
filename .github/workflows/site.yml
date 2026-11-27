@@ -20,9 +20,12 @@ on:
         required: false
         default: ""
   # The fallback, after the host's morning window: deploys the latest export even if the DAG
-  # could not start this workflow (an expired token, say; the DAG alerts on that too).
+  # could not start this workflow (an expired token, say; the DAG alerts on that too). It promises
+  # the same day, not a set time: GitHub does not guarantee when a scheduled run starts. At
+  # "30 10 * * *" every run from 2026-11-19 to 11-26 started 7 to 12 hours late (17:41 to 22:07
+  # UTC). An odd minute avoids the busiest times, as GitHub advises; still measure, do not assume.
   schedule:
-    - cron: "30 10 * * *"
+    - cron: "17 10 * * *"
   # A change to how the site is built takes effect without waiting for the pipeline.
   push:
     branches: [main]
